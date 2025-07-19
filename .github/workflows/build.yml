@@ -1,0 +1,92 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'yarn'
+        cache-dependency-path: frontend/yarn.lock
+
+    - name: Install Wails
+      run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        yarn install
+
+    - name: Build Windows
+      if: matrix.platform == 'windows-latest'
+      run: wails build -platform windows/amd64 -compress
+
+    - name: Build macOS
+      if: matrix.platform == 'macos-latest'
+      run: wails build -platform darwin/universal -compress
+
+    - name: Build Linux
+      if: matrix.platform == 'ubuntu-latest'
+      run: wails build -platform linux/amd64 -compress
+
+    - name: Upload Windows artifacts
+      if: matrix.platform == 'windows-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: URLNavigator-windows-amd64
+        path: build/bin/URLNavigator.exe
+
+    - name: Upload macOS artifacts
+      if: matrix.platform == 'macos-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: URLNavigator-darwin-universal
+        path: build/bin/URLNavigator.app
+
+    - name: Upload Linux artifacts
+      if: matrix.platform == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: URLNavigator-linux-amd64
+        path: build/bin/URLNavigator
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          URLNavigator-windows-amd64/URLNavigator.exe
+          URLNavigator-darwin-universal/URLNavigator.app
+          URLNavigator-linux-amd64/URLNavigator
+        generate_release_notes: true
+        draft: false
+        prerelease: false
