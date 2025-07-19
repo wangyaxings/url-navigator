@@ -1,48 +1,50 @@
-{
-  "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "URLNavigator",
-  "outputfilename": "URLNavigator",
-  "frontend": {
-    "dir": "./frontend",
-    "install": "yarn install",
-    "build": "yarn build",
-    "dev": "yarn dev",
-    "package": {
-      "manager": "yarn"
-    }
-  },
-  "author": {
-    "name": "URLNavigator",
-    "email": "dev@urlnavigator.com"
-  },
-  "info": {
-    "productName": "URL Navigator",
-    "productDescription": "A beautiful URL bookmark manager with auto-update functionality",
-    "companyName": "URLNavigator",
-    "copyright": "Copyright © 2025 URLNavigator. All rights reserved.",
-    "version": "1.2.1"
-  },
-  "github": {
-    "owner": "wangyaxings",
-    "repo": "url-navigator",
-    "comment": "GitHub repository information for auto-update functionality"
-  },
-  "nsisType": "single",
-  "build": {
-    "compiler": "go",
-    "flags": [
-      "-tags", "production",
-      "-trimpath"
-    ],
-    "ldflags": [
-      "-s", "-w",
-      "-X main.Version={{.Info.Version}}",
-      "-X main.GitHubOwner={{.GitHub.Owner}}",
-      "-X main.GitHubRepo={{.GitHub.Repo}}"
-    ]
-  },
-  "buildSettings": {
-    "generateVersionInfo": true,
-    "embedVersionInfo": true
-  }
+﻿{
+    "$schema":  "https://wails.io/schemas/config.v2.json",
+    "name":  "URLNavigator",
+    "outputfilename":  "URLNavigator",
+    "frontend":  {
+                     "dir":  "./frontend",
+                     "install":  "yarn install",
+                     "build":  "yarn build",
+                     "dev":  "yarn dev",
+                     "package":  {
+                                     "manager":  "yarn"
+                                 }
+                 },
+    "author":  {
+                   "name":  "URLNavigator",
+                   "email":  "dev@urlnavigator.com"
+               },
+    "info":  {
+                 "productName":  "URL Navigator",
+                 "productDescription":  "A beautiful URL bookmark manager with auto-update functionality",
+                 "companyName":  "URLNavigator",
+                 "copyright":  "Copyright 漏 2025 URLNavigator. All rights reserved.",
+                 "version":  "1.2.3"
+             },
+    "github":  {
+                   "owner":  "wangyaxings",
+                   "repo":  "url-navigator",
+                   "comment":  "GitHub repository information for auto-update functionality"
+               },
+    "nsisType":  "single",
+    "build":  {
+                  "compiler":  "go",
+                  "flags":  [
+                                "-tags",
+                                "production",
+                                "-trimpath"
+                            ],
+                  "ldflags":  [
+                                  "-s",
+                                  "-w",
+                                  "-X main.Version={{.Info.Version}}",
+                                  "-X main.GitHubOwner={{.GitHub.Owner}}",
+                                  "-X main.GitHubRepo={{.GitHub.Repo}}"
+                              ]
+              },
+    "buildSettings":  {
+                          "generateVersionInfo":  true,
+                          "embedVersionInfo":  true
+                      }
 }

@@ -1,0 +1,23 @@
+﻿{
+  "version": "1.2.2",
+  "github": {
+    "owner": "wangyaxings",
+    "repo": "url-navigator"
+  },
+  "app": {
+    "name": "URLNavigator",
+    "display_name": "URL Navigator",
+    "description": "A beautiful URL bookmark manager with auto-update functionality"
+  },
+  "build": {
+    "platform": "windows/amd64",
+    "flags": ["-tags", "production", "-trimpath", "-clean"],
+    "ldflags": ["-H=windowsgui", "-s", "-w"]
+  },
+  "release": {
+    "create_github_release": true,
+    "auto_open_browser": true,
+    "commit_message_template": "chore: bump version to {version}",
+    "tag_message_template": "Release {version}\n\n Windows Release {version}\n\nFeatures:\n- Bookmark management with categories\n- Auto-update functionality\n- Modern UI with shadcn/ui\n- Local data storage\n- Improved performance and stability\n\nPlatform: Windows x64\nBuild: Automated release with version injection"
+  }
+}
