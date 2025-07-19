@@ -1,0 +1,75 @@
+---
+alwaysApply: true
+description: Development workflow and build process guidelines
+---
+
+# Development Workflow
+
+## Command Usage Guidelines
+- **Frontend Management**: Always use `yarn` for frontend dependency management
+- **Command Chaining**: Avoid using `&` symbol to connect continuous commands
+- **Batch Files**: Use the provided batch files for consistent builds
+
+## Build Scripts
+- **Development**: Use [dev.bat](mdc:dev.bat) for development mode with hot reload
+- **Production Build**: Use [build.bat](mdc:build.bat) for production builds
+- **Running**: Use [run.bat](mdc:run.bat) to execute the built application
+- **Release**: Use [release.sh](mdc:release.sh) for creating releases
+
+## Development Environment Setup
+```bash
+# Frontend dependencies
+cd frontend
+yarn install
+
+# Development mode
+./dev.bat
+```
+
+## Common Commands
+```bash
+# Frontend development
+cd frontend
+yarn dev          # Start Vite dev server
+yarn build        # Build frontend
+yarn preview      # Preview build
+yarn lint         # Run linting
+
+# Wails commands
+wails dev         # Development mode
+wails build       # Production build
+wails doctor      # Check environment
+```
+
+## File Watching and Hot Reload
+- Wails provides hot reload for Go backend changes
+- Vite provides hot reload for frontend changes
+- Both work together in development mode
+
+## Build Process
+1. Frontend build happens first (Vite → dist/)
+2. Go compilation embeds the frontend assets
+3. Final executable contains both frontend and backend
+
+## Debugging
+- Use browser developer tools for frontend debugging
+- Use Go debugging tools for backend issues
+- Check console output for Wails-specific errors
+- Verify [wails.json](mdc:wails.json) configuration
+
+## Version Control
+- Commit changes with descriptive English messages
+- Keep generated files ([frontend/wailsjs/](mdc:frontend/wailsjs/)) in version control
+- Update version numbers in both [package.json](mdc:frontend/package.json) and [wails.json](mdc:wails.json)
+
+## Testing Strategy
+- Test components individually in isolation
+- Test Wails method calls with proper error handling
+- Test on target platforms (Windows primarily based on .bat files)
+- Verify builds work on clean environments
+
+## Performance Considerations
+- Minimize bundle size for faster startup
+- Use lazy loading for large components
+- Optimize images and assets
+- Monitor memory usage in long-running sessions

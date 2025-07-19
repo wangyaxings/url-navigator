@@ -1,0 +1,74 @@
+---
+globs: *.go
+description: Go backend conventions and Wails patterns
+---
+
+# Go Backend Guidelines
+
+## Wails Application Structure
+This Go backend is designed to work with the Wails framework, providing native desktop app functionality.
+
+## Key Files and Their Roles
+- [main.go](mdc:main.go) - Application entry point and Wails setup
+- [app.go](mdc:app.go) - App struct with methods exposed to frontend
+- [updater.go](mdc:updater.go) - Update checking and management logic
+
+## Wails Context Pattern
+```go
+// App struct holds application state
+type App struct {
+    ctx context.Context
+}
+
+// NewApp creates a new App application struct
+func NewApp() *App {
+    return &App{}
+}
+
+// OnStartup is called when the app starts up
+func (a *App) OnStartup(ctx context.Context) {
+    a.ctx = ctx
+}
+```
+
+## Method Exposure to Frontend
+- All methods that need to be called from frontend should be public (PascalCase)
+- Use proper error handling and return meaningful error messages
+- Consider frontend usability when designing method signatures
+
+## Error Handling
+```go
+func (a *App) SomeMethod() (string, error) {
+    result, err := someOperation()
+    if err != nil {
+        return "", fmt.Errorf("operation failed: %w", err)
+    }
+    return result, nil
+}
+```
+
+## File Operations
+- Use proper file path handling with `filepath` package
+- Handle Windows path separators correctly
+- Always close file handles properly with defer
+- Check file permissions before operations
+
+## Logging and Debugging
+- Use appropriate logging levels
+- Log errors with context
+- Avoid logging sensitive information
+- Use structured logging when possible
+
+## Configuration Management
+- Load configuration from [wails.json](mdc:wails.json)
+- Handle missing configuration gracefully
+- Validate configuration values
+
+## Best Practices
+- Keep methods focused and single-purpose
+- Use meaningful variable names
+- Add comments for exported functions
+- Handle context cancellation properly
+- Use proper mutex locking for concurrent operations
+- Validate input parameters from frontend calls
+- Return structured data that's easy to consume in TypeScript

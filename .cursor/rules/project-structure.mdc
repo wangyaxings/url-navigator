@@ -1,0 +1,40 @@
+---
+alwaysApply: true
+description: AutoUpdate project structure and architecture guide
+---
+
+# AutoUpdate Project Structure
+
+This is a **Wails application** combining Go backend with React/TypeScript frontend.
+
+## Architecture Overview
+- **Backend**: Go application with Wails framework
+- **Frontend**: React + TypeScript + Vite + Tailwind CSS
+- **UI Components**: Custom component library in `src/components/ui/`
+
+## Key Files
+- [main.go](mdc:main.go) - Application entry point
+- [app.go](mdc:app.go) - Main application logic and Wails bindings
+- [updater.go](mdc:updater.go) - Update checking functionality
+- [frontend/src/App.tsx](mdc:frontend/src/App.tsx) - React application root
+- [frontend/src/main.tsx](mdc:frontend/src/main.tsx) - Frontend entry point
+
+## Frontend Structure
+- **Components**: [frontend/src/components/](mdc:frontend/src/components/)
+  - [CategoryManager.tsx](mdc:frontend/src/components/CategoryManager.tsx) - Category management
+  - [UpdateChecker.tsx](mdc:frontend/src/components/UpdateChecker.tsx) - Update checking UI
+  - [URLFormDialog.tsx](mdc:frontend/src/components/URLFormDialog.tsx) - URL form dialog
+  - **UI Components**: Reusable components in [frontend/src/components/ui/](mdc:frontend/src/components/ui/)
+- **Types**: TypeScript definitions in [frontend/src/types/](mdc:frontend/src/types/)
+- **Wails Bindings**: Auto-generated Go bindings in [frontend/wailsjs/](mdc:frontend/wailsjs/)
+
+## Build Scripts
+- [build.bat](mdc:build.bat) - Production build
+- [dev.bat](mdc:dev.bat) - Development mode
+- [run.bat](mdc:run.bat) - Application runner
+- [release.sh](mdc:release.sh) - Release script
+
+## Configuration
+- [wails.json](mdc:wails.json) - Wails configuration
+- [frontend/package.json](mdc:frontend/package.json) - Frontend dependencies (managed with yarn)
+- [go.mod](mdc:go.mod) - Go module dependencies

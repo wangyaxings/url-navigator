@@ -5,6 +5,8 @@ export interface URLItem {
   description: string;
   category: string;
   tags: string[];
+  favicon?: string;
+  order: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,4 +24,14 @@ export interface UpdateInfo {
   latestVersion: string;
   updateUrl: string;
   releaseNotes: string;
+}
+
+export interface AdvancedSearchOptions {
+  query: string;
+  category: string;
+  tags: string[];
+  startDate: string;
+  endDate: string;
+  sortBy: string;
+  searchIn: string[];
 }

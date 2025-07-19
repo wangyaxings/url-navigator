@@ -4,10 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { URLItem, Category } from '@/types';
+import { URLItem, Category, AdvancedSearchOptions } from '@/types';
 import URLFormDialog from '@/components/URLFormDialog';
 import CategoryManager from '@/components/CategoryManager';
 import UpdateChecker from '@/components/UpdateChecker';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { AdvancedSearch } from '@/components/AdvancedSearch';
+import { DraggableURLCard } from '@/components/DraggableURLCard';
+import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, rectSortingStrategy } from '@dnd-kit/sortable';
 
 // 导入 Wails 生成的绑定
 import * as AppService from '../wailsjs/go/main/App';
@@ -21,6 +26,7 @@ function App() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [deleteDialogURL, setDeleteDialogURL] = useState<URLItem | null>(null);
+  const [isAdvancedSearchActive, setIsAdvancedSearchActive] = useState(false);
 
   // 加载数据
   const loadData = async () => {
@@ -43,6 +49,55 @@ function App() {
       setUrls(results || []);
     } catch (error) {
       console.error('Failed to search URLs:', error);
+    }
+  };
+
+  // 高级搜索
+  const handleAdvancedSearch = async (options: AdvancedSearchOptions) => {
+    try {
+      const results = await AppService.AdvancedSearchURLs(options);
+      setUrls(results || []);
+      setIsAdvancedSearchActive(true);
+    } catch (error) {
+      console.error('Failed to perform advanced search:', error);
+    }
+  };
+
+  // 重置搜索
+  const handleResetSearch = async () => {
+    setSearchTerm('');
+    setSelectedCategory('all');
+    setIsAdvancedSearchActive(false);
+    await loadData();
+  };
+
+  // 处理拖拽结束
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (active.id !== over?.id) {
+      const oldIndex = urls.findIndex((url) => url.id === active.id);
+      const newIndex = urls.findIndex((url) => url.id === over?.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        // 重新排列本地数组
+        const newUrls = [...urls];
+        const [reorderedItem] = newUrls.splice(oldIndex, 1);
+        newUrls.splice(newIndex, 0, reorderedItem);
+
+        setUrls(newUrls);
+
+        // 创建新的顺序数组
+        const urlIDs = newUrls.map(url => url.id);
+
+        try {
+          await AppService.ReorderURLs(urlIDs);
+        } catch (error) {
+          console.error('Failed to reorder URLs:', error);
+          // 如果失败，恢复原来的顺序
+          setUrls(urls);
+        }
+      }
     }
   };
 
@@ -90,15 +145,16 @@ function App() {
   }, [searchTerm]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-background text-foreground p-6 transition-colors duration-300">
       <div className="max-w-7xl mx-auto">
         {/* 顶部工具栏 */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">网址导航</h1>
-            <p className="text-gray-600 mt-1">管理您的网址收藏</p>
+            <h1 className="text-3xl font-bold text-foreground">网址导航</h1>
+            <p className="text-muted-foreground mt-1">管理您的网址收藏</p>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            <ThemeToggle />
             <UpdateChecker />
             <Button
               variant="outline"
@@ -117,7 +173,7 @@ function App() {
         {/* 搜索和过滤 */}
         <div className="flex items-center space-x-4 mb-6">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
               placeholder="搜索网址、标题或描述..."
               value={searchTerm}
@@ -128,7 +184,7 @@ function App() {
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 border border-input bg-background text-foreground rounded-md focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
           >
             <option value="all">所有分类</option>
             {categories.map((category) => (
@@ -137,6 +193,16 @@ function App() {
               </option>
             ))}
           </select>
+          <AdvancedSearch
+            categories={categories}
+            onSearch={handleAdvancedSearch}
+            onReset={handleResetSearch}
+          />
+          {isAdvancedSearchActive && (
+            <Button variant="outline" size="sm" onClick={handleResetSearch}>
+              重置搜索
+            </Button>
+          )}
         </div>
 
         {/* URL卡片网格 */}
@@ -146,9 +212,25 @@ function App() {
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <CardTitle className="text-lg font-semibold text-gray-900 line-clamp-1">
-                      {url.title}
-                    </CardTitle>
+                    <div className="flex items-center space-x-2">
+                      {url.favicon ? (
+                        <img
+                          src={url.favicon}
+                          alt={`${url.title} favicon`}
+                          className="w-5 h-5 flex-shrink-0 rounded-sm"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-5 h-5 flex-shrink-0 rounded-sm bg-muted flex items-center justify-center">
+                          <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                        </div>
+                      )}
+                      <CardTitle className="text-lg font-semibold text-foreground line-clamp-1">
+                        {url.title}
+                      </CardTitle>
+                    </div>
                     <CardDescription className="mt-1 line-clamp-2">
                       {url.description}
                     </CardDescription>
@@ -178,7 +260,7 @@ function App() {
                       className="inline-block w-3 h-3 rounded-full"
                       style={{ backgroundColor: getCategoryColor(url.category) }}
                     />
-                    <span className="text-sm text-gray-600">{url.category}</span>
+                    <span className="text-sm text-muted-foreground">{url.category}</span>
                   </div>
                   <Button
                     variant="outline"

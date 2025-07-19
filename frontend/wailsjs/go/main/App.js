@@ -6,6 +6,10 @@ export function AddURL(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['AddURL'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function AdvancedSearchURLs(arg1) {
+  return window['go']['main']['App']['AdvancedSearchURLs'](arg1);
+}
+
 export function CheckForUpdates() {
   return window['go']['main']['App']['CheckForUpdates']();
 }
@@ -20,6 +24,10 @@ export function DownloadAndApplyUpdate(arg1) {
 
 export function EnsureDataDir() {
   return window['go']['main']['App']['EnsureDataDir']();
+}
+
+export function FetchFavicon(arg1) {
+  return window['go']['main']['App']['FetchFavicon'](arg1);
 }
 
 export function GetCategories() {
@@ -48,6 +56,14 @@ export function SaveURLs(arg1) {
 
 export function SearchURLs(arg1) {
   return window['go']['main']['App']['SearchURLs'](arg1);
+}
+
+export function TestNoUpdate() {
+  return window['go']['main']['App']['TestNoUpdate']();
+}
+
+export function TestUpdateAvailable() {
+  return window['go']['main']['App']['TestUpdateAvailable']();
 }
 
 export function UpdateURL(arg1, arg2, arg3, arg4, arg5, arg6) {

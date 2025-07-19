@@ -17,6 +17,7 @@ type URLItem struct {
 	Description string    `json:"description"`
 	Category    string    `json:"category"`
 	Tags        []string  `json:"tags"`
+	Order       int       `json:"order"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
@@ -88,6 +89,14 @@ func (a *App) AddURL(title, url, description, category string, tags []string) (*
 		return nil, err
 	}
 
+	// Calculate next order (highest order + 1)
+	order := 0
+	for _, existingURL := range urls {
+		if existingURL.Order >= order {
+			order = existingURL.Order + 1
+		}
+	}
+
 	newURL := URLItem{
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
 		Title:       title,
@@ -95,6 +104,7 @@ func (a *App) AddURL(title, url, description, category string, tags []string) (*
 		Description: description,
 		Category:    category,
 		Tags:        tags,
+		Order:       order,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -231,5 +241,29 @@ func containsIgnoreCase(str, substr string) bool {
 		      (str[:len(substr)] == substr ||
 		       str[len(str)-len(substr):] == substr ||
 		       containsIgnoreCase(str[1:], substr)))))
+}
+
+// ReorderURLs updates the order of URLs based on new positions
+func (a *App) ReorderURLs(urlIDs []string) error {
+	urls, err := a.GetURLs()
+	if err != nil {
+		return err
+	}
+
+	// Create a map for quick lookup
+	urlMap := make(map[string]*URLItem)
+	for i := range urls {
+		urlMap[urls[i].ID] = &urls[i]
+	}
+
+	// Update orders based on new positions
+	for newOrder, urlID := range urlIDs {
+		if url, exists := urlMap[urlID]; exists {
+			url.Order = newOrder
+			url.UpdatedAt = time.Now()
+		}
+	}
+
+	return a.SaveURLs(urls)
 }
 

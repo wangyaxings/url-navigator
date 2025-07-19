@@ -1,0 +1,49 @@
+---
+alwaysApply: true
+description: Code style and conventions for AutoUpdate project
+---
+
+# Code Style and Conventions
+
+## General Guidelines
+- **Language**: All code, comments, and scripts must be written in **English**
+- **Documentation**: Respond to user in Chinese-simplified when communicating
+- **Package Management**: Frontend uses **yarn** for dependency management
+- **Command Chaining**: Avoid using `&` symbol to connect continuous commands
+
+## Frontend (React/TypeScript)
+- Use **TypeScript** for type safety
+- Follow **React** functional component patterns
+- Use **Tailwind CSS** for styling
+- Components should be in PascalCase (e.g., `CategoryManager.tsx`)
+- Use destructuring for props
+- Prefer `const` over `let` where possible
+- Use semicolons consistently
+- Import order: external libraries → internal components → types
+
+## Go Backend
+- Follow standard Go conventions
+- Use camelCase for unexported functions
+- Use PascalCase for exported functions
+- Keep functions focused and single-purpose
+- Use meaningful variable names
+- Add comments for exported functions
+
+## File Organization
+- UI components go in [frontend/src/components/ui/](mdc:frontend/src/components/ui/)
+- Business logic components in [frontend/src/components/](mdc:frontend/src/components/)
+- Types and interfaces in [frontend/src/types/](mdc:frontend/src/types/)
+- Utilities in [frontend/src/lib/](mdc:frontend/src/lib/)
+
+## Naming Conventions
+- **Files**: kebab-case for CSS, PascalCase for React components
+- **Functions**: camelCase
+- **Constants**: UPPER_SNAKE_CASE
+- **Interfaces/Types**: PascalCase with descriptive names
+
+## Best Practices
+- Keep components small and focused
+- Use TypeScript interfaces for props
+- Implement proper error handling
+- Write self-documenting code
+- Use meaningful commit messages in English

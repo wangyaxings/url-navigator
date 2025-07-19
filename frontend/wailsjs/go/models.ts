@@ -1,5 +1,29 @@
 export namespace main {
 	
+	export class AdvancedSearchOptions {
+	    query: string;
+	    category: string;
+	    tags: string[];
+	    startDate: string;
+	    endDate: string;
+	    sortBy: string;
+	    searchIn: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AdvancedSearchOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.query = source["query"];
+	        this.category = source["category"];
+	        this.tags = source["tags"];
+	        this.startDate = source["startDate"];
+	        this.endDate = source["endDate"];
+	        this.sortBy = source["sortBy"];
+	        this.searchIn = source["searchIn"];
+	    }
+	}
 	export class Category {
 	    id: string;
 	    name: string;
@@ -25,6 +49,7 @@ export namespace main {
 	    description: string;
 	    category: string;
 	    tags: string[];
+	    favicon: string;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -42,6 +67,7 @@ export namespace main {
 	        this.description = source["description"];
 	        this.category = source["category"];
 	        this.tags = source["tags"];
+	        this.favicon = source["favicon"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }

@@ -1,0 +1,68 @@
+---
+globs: *.ts,*.tsx
+description: TypeScript and React specific conventions
+---
+
+# Frontend TypeScript/React Guidelines
+
+## Component Structure
+```typescript
+interface ComponentProps {
+  // Define props with descriptive names
+  title: string;
+  isVisible?: boolean;
+  onAction?: () => void;
+}
+
+export const ComponentName: React.FC<ComponentProps> = ({
+  title,
+  isVisible = false,
+  onAction
+}) => {
+  // Component implementation
+};
+```
+
+## Import Organization
+```typescript
+// 1. External libraries
+import React from 'react';
+import { useState, useEffect } from 'react';
+
+// 2. Internal components and utilities
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
+// 3. Types and interfaces
+import type { ComponentProps } from '@/types';
+```
+
+## State Management
+- Use `useState` for local component state
+- Use `useEffect` with proper dependency arrays
+- Prefer functional updates for state that depends on previous state
+- Use `useCallback` for memoizing functions passed as props
+
+## Styling with Tailwind
+- Use Tailwind utility classes
+- Use the `cn` utility function from [frontend/src/lib/utils.ts](mdc:frontend/src/lib/utils.ts) for conditional classes
+- Keep responsive design in mind: `sm:`, `md:`, `lg:` prefixes
+
+## Error Handling
+- Always handle promise rejections
+- Use try-catch blocks for async operations
+- Provide user-friendly error messages
+- Log errors for debugging
+
+## Wails Integration
+- Import Wails functions from [frontend/wailsjs/go/main/App.js](mdc:frontend/wailsjs/go/main/App.js)
+- Handle Wails call failures gracefully
+- Use proper TypeScript types from [frontend/wailsjs/go/main/App.d.ts](mdc:frontend/wailsjs/go/main/App.d.ts)
+
+## Best Practices
+- Always use semicolons
+- Prefer `const` assertions for literal types
+- Use descriptive variable names
+- Keep components under 200 lines
+- Extract custom hooks for reusable logic
+- Use proper TypeScript generics when needed

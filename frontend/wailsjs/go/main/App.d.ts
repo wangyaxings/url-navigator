@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function AddURL(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>):Promise<main.URLItem>;
 
+export function AdvancedSearchURLs(arg1:main.AdvancedSearchOptions):Promise<Array<main.URLItem>>;
+
 export function CheckForUpdates():Promise<main.UpdateInfo>;
 
 export function DeleteURL(arg1:string):Promise<void>;
@@ -11,6 +13,8 @@ export function DeleteURL(arg1:string):Promise<void>;
 export function DownloadAndApplyUpdate(arg1:string):Promise<void>;
 
 export function EnsureDataDir():Promise<void>;
+
+export function FetchFavicon(arg1:string):Promise<string>;
 
 export function GetCategories():Promise<Array<main.Category>>;
 
@@ -25,5 +29,9 @@ export function SaveCategories(arg1:Array<main.Category>):Promise<void>;
 export function SaveURLs(arg1:Array<main.URLItem>):Promise<void>;
 
 export function SearchURLs(arg1:string):Promise<Array<main.URLItem>>;
+
+export function TestNoUpdate():Promise<main.UpdateInfo>;
+
+export function TestUpdateAvailable():Promise<main.UpdateInfo>;
 
 export function UpdateURL(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:Array<string>):Promise<main.URLItem>;
