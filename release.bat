@@ -36,13 +36,13 @@ if "%~3"=="--skip-build" set SKIP_BUILD=true
 if "%~3"=="--skip-release" set SKIP_RELEASE=true
 
 :: Validate version format (support both vX.Y.Z and X.Y.Z)
-echo %NEW_VERSION% | findstr /r "^v[0-9]*\.[0-9]*\.[0-9]*$" >nul
+echo %NEW_VERSION% | findstr /r "^v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul
 if not errorlevel 1 (
     :: Version with v prefix - remove v for internal processing
     set VERSION_NUMBER=%NEW_VERSION:~1%
 ) else (
     :: Check if it's X.Y.Z format
-    echo %NEW_VERSION% | findstr /r "^[0-9]*\.[0-9]*\.[0-9]*$" >nul
+    echo %NEW_VERSION% | findstr /r "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul
     if not errorlevel 1 (
         :: Version without v prefix - add v for consistency
         set NEW_VERSION=v%NEW_VERSION%
