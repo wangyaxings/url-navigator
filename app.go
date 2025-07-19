@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -265,5 +266,142 @@ func (a *App) ReorderURLs(urlIDs []string) error {
 	}
 
 	return a.SaveURLs(urls)
+}
+
+// AdvancedSearchOptions represents advanced search parameters
+type AdvancedSearchOptions struct {
+	Query     string   `json:"query"`
+	Category  string   `json:"category"`
+	Tags      []string `json:"tags"`
+	StartDate string   `json:"startDate"`
+	EndDate   string   `json:"endDate"`
+	SortBy    string   `json:"sortBy"`    // title, date, category, frequency
+	SearchIn  []string `json:"searchIn"` // title, description, url
+}
+
+// AdvancedSearchURLs performs advanced search with multiple criteria
+func (a *App) AdvancedSearchURLs(options AdvancedSearchOptions) ([]URLItem, error) {
+	urls, err := a.GetURLs()
+	if err != nil {
+		return nil, err
+	}
+
+	var filteredUrls []URLItem
+
+	for _, url := range urls {
+		if a.matchesAdvancedCriteria(url, options) {
+			filteredUrls = append(filteredUrls, url)
+		}
+	}
+
+	// Sort results
+	a.sortURLs(filteredUrls, options.SortBy)
+
+	return filteredUrls, nil
+}
+
+// matchesAdvancedCriteria checks if a URL matches the advanced search criteria
+func (a *App) matchesAdvancedCriteria(url URLItem, options AdvancedSearchOptions) bool {
+	// Check category filter
+	if options.Category != "" && options.Category != "all" && url.Category != options.Category {
+		return false
+	}
+
+	// Check tags filter
+	if len(options.Tags) > 0 {
+		hasMatchingTag := false
+		for _, searchTag := range options.Tags {
+			for _, urlTag := range url.Tags {
+				if strings.Contains(strings.ToLower(urlTag), strings.ToLower(searchTag)) {
+					hasMatchingTag = true
+					break
+				}
+			}
+			if hasMatchingTag {
+				break
+			}
+		}
+		if !hasMatchingTag {
+			return false
+		}
+	}
+
+	// Check date range
+	if options.StartDate != "" || options.EndDate != "" {
+		urlDate := url.CreatedAt.Format("2006-01-02")
+
+		if options.StartDate != "" && urlDate < options.StartDate {
+			return false
+		}
+
+		if options.EndDate != "" && urlDate > options.EndDate {
+			return false
+		}
+	}
+
+	// Check search query in specified fields
+	if options.Query != "" {
+		searchFields := options.SearchIn
+		if len(searchFields) == 0 {
+			// Default to all fields if none specified
+			searchFields = []string{"title", "description", "url"}
+		}
+
+		queryLower := strings.ToLower(options.Query)
+		found := false
+
+		for _, field := range searchFields {
+			var searchText string
+			switch field {
+			case "title":
+				searchText = strings.ToLower(url.Title)
+			case "description":
+				searchText = strings.ToLower(url.Description)
+			case "url":
+				searchText = strings.ToLower(url.URL)
+			}
+
+			if strings.Contains(searchText, queryLower) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return false
+		}
+	}
+
+	return true
+}
+
+// sortURLs sorts URLs based on the specified criteria
+func (a *App) sortURLs(urls []URLItem, sortBy string) {
+	switch sortBy {
+	case "title":
+		for i := 0; i < len(urls)-1; i++ {
+			for j := i + 1; j < len(urls); j++ {
+				if strings.ToLower(urls[i].Title) > strings.ToLower(urls[j].Title) {
+					urls[i], urls[j] = urls[j], urls[i]
+				}
+			}
+		}
+	case "date":
+		for i := 0; i < len(urls)-1; i++ {
+			for j := i + 1; j < len(urls); j++ {
+				if urls[i].CreatedAt.Before(urls[j].CreatedAt) {
+					urls[i], urls[j] = urls[j], urls[i]
+				}
+			}
+		}
+	case "category":
+		for i := 0; i < len(urls)-1; i++ {
+			for j := i + 1; j < len(urls); j++ {
+				if strings.ToLower(urls[i].Category) > strings.ToLower(urls[j].Category) {
+					urls[i], urls[j] = urls[j], urls[i]
+				}
+			}
+		}
+	}
 }
 

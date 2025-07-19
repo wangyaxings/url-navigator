@@ -49,7 +49,7 @@ export namespace main {
 	    description: string;
 	    category: string;
 	    tags: string[];
-	    favicon: string;
+	    order: number;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -67,7 +67,7 @@ export namespace main {
 	        this.description = source["description"];
 	        this.category = source["category"];
 	        this.tags = source["tags"];
-	        this.favicon = source["favicon"];
+	        this.order = source["order"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }

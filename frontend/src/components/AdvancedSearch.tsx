@@ -19,9 +19,10 @@ interface AdvancedSearchProps {
   categories: Category[];
   onSearch: (options: AdvancedSearchOptions) => void;
   onReset: () => void;
+  triggerRef?: React.RefObject<HTMLButtonElement>;
 }
 
-export function AdvancedSearch({ categories, onSearch, onReset }: AdvancedSearchProps) {
+export function AdvancedSearch({ categories, onSearch, onReset, triggerRef }: AdvancedSearchProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchOptions, setSearchOptions] = useState<AdvancedSearchOptions>({
     query: '',
@@ -81,7 +82,7 @@ export function AdvancedSearch({ categories, onSearch, onReset }: AdvancedSearch
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button ref={triggerRef} variant="outline" size="sm">
           <Filter className="h-4 w-4 mr-2" />
           高级搜索
         </Button>

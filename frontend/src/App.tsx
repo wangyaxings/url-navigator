@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Plus, Search, Settings, ExternalLink, Edit2, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Search, Settings, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { URLItem, Category, AdvancedSearchOptions } from '@/types';
 import URLFormDialog from '@/components/URLFormDialog';
@@ -11,8 +11,12 @@ import UpdateChecker from '@/components/UpdateChecker';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { AdvancedSearch } from '@/components/AdvancedSearch';
 import { DraggableURLCard } from '@/components/DraggableURLCard';
+import { URLListView } from '@/components/URLListView';
+import { LayoutControls, ViewMode, GridColumns } from '@/components/LayoutControls';
+import { KeyboardShortcutsHelp, KeyboardShortcutTooltip } from '@/components/KeyboardShortcutsHelp';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, rectSortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 
 // 导入 Wails 生成的绑定
 import * as AppService from '../wailsjs/go/main/App';
@@ -27,6 +31,15 @@ function App() {
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [deleteDialogURL, setDeleteDialogURL] = useState<URLItem | null>(null);
   const [isAdvancedSearchActive, setIsAdvancedSearchActive] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [gridColumns, setGridColumns] = useState<GridColumns>(4);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isHelpDialogOpen, setIsHelpDialogOpen] = useState(false);
+  const [showShortcutTooltip, setShowShortcutTooltip] = useState(true);
+
+  // Refs for keyboard shortcuts
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const advancedSearchTriggerRef = useRef<HTMLButtonElement>(null);
 
   // 加载数据
   const loadData = async () => {
@@ -96,10 +109,57 @@ function App() {
           console.error('Failed to reorder URLs:', error);
           // 如果失败，恢复原来的顺序
           setUrls(urls);
-        }
-      }
+                 }
+       }
+     }
+   };
+
+   // 处理全屏切换
+   const handleFullscreenToggle = () => {
+     setIsFullscreen(!isFullscreen);
+   };
+
+   // 获取网格CSS类
+   const getGridClass = (columns: GridColumns) => {
+     const gridClasses = {
+       1: 'grid-cols-1',
+       2: 'grid-cols-1 md:grid-cols-2',
+       3: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
+       4: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+       5: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5',
+       6: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6'
+     };
+         return gridClasses[columns];
+  };
+
+  // 键盘快捷键处理函数
+  const handleToggleViewMode = () => {
+    setViewMode(current => current === 'grid' ? 'list' : 'grid');
+  };
+
+  const handleFocusSearch = () => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+      searchInputRef.current.select();
     }
   };
+
+  const handleTriggerAdvancedSearch = () => {
+    if (advancedSearchTriggerRef.current) {
+      advancedSearchTriggerRef.current.click();
+    }
+  };
+
+  // 使用键盘快捷键
+  useKeyboardShortcuts({
+    onNewBookmark: () => setIsAddDialogOpen(true),
+    onSearch: handleFocusSearch,
+    onAdvancedSearch: handleTriggerAdvancedSearch,
+    onToggleViewMode: handleToggleViewMode,
+    onToggleFullscreen: handleFullscreenToggle,
+    onRefresh: loadData,
+    onShowHelp: () => setIsHelpDialogOpen(true)
+  });
 
   // 删除URL
   const handleDeleteURL = async (url: URLItem) => {
@@ -175,7 +235,8 @@ function App() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
-              placeholder="搜索网址、标题或描述..."
+              ref={searchInputRef}
+              placeholder="搜索网址、标题或描述... (Ctrl+F)"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -193,99 +254,74 @@ function App() {
               </option>
             ))}
           </select>
-          <AdvancedSearch
+                              <AdvancedSearch
             categories={categories}
             onSearch={handleAdvancedSearch}
             onReset={handleResetSearch}
+            triggerRef={advancedSearchTriggerRef}
           />
           {isAdvancedSearchActive && (
             <Button variant="outline" size="sm" onClick={handleResetSearch}>
               重置搜索
             </Button>
           )}
+          <LayoutControls
+            viewMode={viewMode}
+            gridColumns={gridColumns}
+            isFullscreen={isFullscreen}
+            onViewModeChange={setViewMode}
+            onGridColumnsChange={setGridColumns}
+            onFullscreenToggle={handleFullscreenToggle}
+          />
         </div>
 
-        {/* URL卡片网格 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredUrls.map((url) => (
-            <Card key={url.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      {url.favicon ? (
-                        <img
-                          src={url.favicon}
-                          alt={`${url.title} favicon`}
-                          className="w-5 h-5 flex-shrink-0 rounded-sm"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-5 h-5 flex-shrink-0 rounded-sm bg-muted flex items-center justify-center">
-                          <ExternalLink className="w-3 h-3 text-muted-foreground" />
-                        </div>
-                      )}
-                      <CardTitle className="text-lg font-semibold text-foreground line-clamp-1">
-                        {url.title}
-                      </CardTitle>
-                    </div>
-                    <CardDescription className="mt-1 line-clamp-2">
-                      {url.description}
-                    </CardDescription>
-                  </div>
-                  <div className="flex items-center space-x-1 ml-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingURL(url)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteDialogURL(url)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span
-                      className="inline-block w-3 h-3 rounded-full"
-                      style={{ backgroundColor: getCategoryColor(url.category) }}
-                    />
-                    <span className="text-sm text-muted-foreground">{url.category}</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openURL(url.url)}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-1" />
-                    访问
-                  </Button>
-                </div>
-                {url.tags && url.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {url.tags.map((tag, index) => (
-                      <span
-                        key={index}
-                        className="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded"
-                      >
-                        {tag}
-                      </span>
+        {/* URL显示区域 */}
+        <div className={`${isFullscreen ? 'fixed inset-0 z-50 bg-background p-6 overflow-auto' : ''}`}>
+          {isFullscreen && (
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold">书签浏览</h2>
+              <Button onClick={handleFullscreenToggle} variant="outline">
+                <ExternalLink className="h-4 w-4 mr-2" />
+                退出全屏
+              </Button>
+            </div>
+          )}
+
+          {viewMode === 'list' ? (
+            <URLListView
+              urls={filteredUrls}
+              onEdit={setEditingURL}
+              onDelete={setDeleteDialogURL}
+              onOpen={openURL}
+              getCategoryColor={getCategoryColor}
+              isDragEnabled={true}
+            />
+          ) : (
+            <DndContext
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={filteredUrls.map(url => url.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className={`grid ${getGridClass(gridColumns)} gap-6`}>
+                  {filteredUrls
+                    .sort((a, b) => a.order - b.order)
+                    .map((url) => (
+                      <DraggableURLCard
+                        key={url.id}
+                        url={url}
+                        onEdit={setEditingURL}
+                        onDelete={setDeleteDialogURL}
+                        onOpen={openURL}
+                        getCategoryColor={getCategoryColor}
+                      />
                     ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
         </div>
 
         {filteredUrls.length === 0 && (
@@ -343,6 +379,27 @@ function App() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* 键盘快捷键帮助 */}
+        <KeyboardShortcutsHelp
+          isOpen={isHelpDialogOpen}
+          onOpenChange={setIsHelpDialogOpen}
+        />
+
+        {/* 快捷键提示 */}
+        {showShortcutTooltip && (
+          <div className="relative">
+            <KeyboardShortcutTooltip />
+            <Button
+              onClick={() => setShowShortcutTooltip(false)}
+              variant="ghost"
+              size="sm"
+              className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full bg-background border"
+            >
+              ×
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

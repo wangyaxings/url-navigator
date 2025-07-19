@@ -26,10 +26,6 @@ export function EnsureDataDir() {
   return window['go']['main']['App']['EnsureDataDir']();
 }
 
-export function FetchFavicon(arg1) {
-  return window['go']['main']['App']['FetchFavicon'](arg1);
-}
-
 export function GetCategories() {
   return window['go']['main']['App']['GetCategories']();
 }
@@ -44,6 +40,10 @@ export function GetDataDir() {
 
 export function GetURLs() {
   return window['go']['main']['App']['GetURLs']();
+}
+
+export function ReorderURLs(arg1) {
+  return window['go']['main']['App']['ReorderURLs'](arg1);
 }
 
 export function SaveCategories(arg1) {

@@ -14,8 +14,6 @@ export function DownloadAndApplyUpdate(arg1:string):Promise<void>;
 
 export function EnsureDataDir():Promise<void>;
 
-export function FetchFavicon(arg1:string):Promise<string>;
-
 export function GetCategories():Promise<Array<main.Category>>;
 
 export function GetCurrentVersion():Promise<string>;
@@ -23,6 +21,8 @@ export function GetCurrentVersion():Promise<string>;
 export function GetDataDir():Promise<string>;
 
 export function GetURLs():Promise<Array<main.URLItem>>;
+
+export function ReorderURLs(arg1:Array<string>):Promise<void>;
 
 export function SaveCategories(arg1:Array<main.Category>):Promise<void>;
 
