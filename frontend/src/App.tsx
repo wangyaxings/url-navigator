@@ -16,6 +16,9 @@ import { LayoutControls, ViewMode, GridColumns } from '@/components/LayoutContro
 import { KeyboardShortcutsHelp, KeyboardShortcutTooltip } from '@/components/KeyboardShortcutsHelp';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ContextMenu } from '@/components/ContextMenu';
+import { ImportExport } from '@/components/ImportExport';
+import { VersionInfo } from '@/components/VersionInfo';
+import { apiCache, searchCache, withCache } from '@/lib/cacheManager';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 
@@ -53,18 +56,41 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const advancedSearchTriggerRef = useRef<HTMLButtonElement>(null);
 
+  // 创建缓存版本的API函数
+  const cachedGetURLs = withCache(
+    AppService.GetURLs,
+    apiCache,
+    () => 'urls',
+    60000 // 1分钟缓存
+  );
+
+  const cachedGetCategories = withCache(
+    AppService.GetCategories,
+    apiCache,
+    () => 'categories',
+    300000 // 5分钟缓存
+  );
+
   // 加载数据
   const loadData = async () => {
     try {
       const [urlsData, categoriesData] = await Promise.all([
-        AppService.GetURLs(),
-        AppService.GetCategories()
+        cachedGetURLs(),
+        cachedGetCategories()
       ]);
       setUrls(urlsData || []);
       setCategories(categoriesData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
+  };
+
+  // 刷新数据（清除缓存）
+  const refreshData = async () => {
+    apiCache.delete('urls');
+    apiCache.delete('categories');
+    searchCache.clear(); // 清除搜索缓存
+    await loadData();
   };
 
   // 搜索URLs
@@ -77,10 +103,18 @@ function App() {
     }
   };
 
+  // 创建缓存版本的搜索函数
+  const cachedAdvancedSearch = withCache(
+    AppService.AdvancedSearchURLs,
+    searchCache,
+    (options: AdvancedSearchOptions) => `search-${JSON.stringify(options)}`,
+    120000 // 2分钟缓存
+  );
+
   // 高级搜索
   const handleAdvancedSearch = async (options: AdvancedSearchOptions) => {
     try {
-      const results = await AppService.AdvancedSearchURLs(options);
+      const results = await cachedAdvancedSearch(options);
       setUrls(results || []);
       setIsAdvancedSearchActive(true);
     } catch (error) {
@@ -204,7 +238,7 @@ function App() {
     onAdvancedSearch: handleTriggerAdvancedSearch,
     onToggleViewMode: handleToggleViewMode,
     onToggleFullscreen: handleFullscreenToggle,
-    onRefresh: loadData,
+    onRefresh: refreshData, // 使用刷新数据而不是加载数据
     onShowHelp: () => setIsHelpDialogOpen(true)
   });
 
@@ -261,6 +295,8 @@ function App() {
             <p className="text-muted-foreground mt-1">管理您的网址收藏</p>
           </div>
           <div className="flex items-center space-x-3">
+            <VersionInfo />
+            <ImportExport onImportComplete={refreshData} />
             <ThemeToggle />
             <UpdateChecker />
             <Button
@@ -320,6 +356,7 @@ function App() {
             onGridColumnsChange={setGridColumns}
             onFullscreenToggle={handleFullscreenToggle}
           />
+          <ImportExport onImportComplete={loadData} />
         </div>
 
         {/* URL显示区域 */}

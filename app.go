@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -208,6 +209,29 @@ func (a *App) SaveCategories(categories []Category) error {
 	return ioutil.WriteFile(filePath, data, 0644)
 }
 
+// AddCategory adds a new category
+func (a *App) AddCategory(name, description, color string) (*Category, error) {
+	categories, err := a.GetCategories()
+	if err != nil {
+		return nil, err
+	}
+
+	newCategory := Category{
+		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
+		Name:        name,
+		Description: description,
+		Color:       color,
+	}
+
+	categories = append(categories, newCategory)
+	err = a.SaveCategories(categories)
+	if err != nil {
+		return nil, err
+	}
+
+	return &newCategory, nil
+}
+
 // SearchURLs searches URLs by keyword
 func (a *App) SearchURLs(keyword string) ([]URLItem, error) {
 	urls, err := a.GetURLs()
@@ -403,5 +427,154 @@ func (a *App) sortURLs(urls []URLItem, sortBy string) {
 			}
 		}
 	}
+}
+
+// ExportBookmarks exports all bookmarks to JSON format
+func (a *App) ExportBookmarks() (string, error) {
+	urls, err := a.GetURLs()
+	if err != nil {
+		return "", err
+	}
+
+	categories, err := a.GetCategories()
+	if err != nil {
+		return "", err
+	}
+
+	exportData := map[string]interface{}{
+		"bookmarks":  urls,
+		"categories": categories,
+		"exportedAt": time.Now(),
+		"version":    "1.2.1",
+	}
+
+	jsonData, err := json.MarshalIndent(exportData, "", "  ")
+	if err != nil {
+		return "", err
+	}
+
+	return string(jsonData), nil
+}
+
+// ChromeBookmark represents Chrome bookmark structure
+type ChromeBookmark struct {
+	DateAdded    string            `json:"date_added"`
+	DateModified string            `json:"date_modified"`
+	GUID         string            `json:"guid"`
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	Type         string            `json:"type"`
+	URL          string            `json:"url"`
+	Children     []ChromeBookmark  `json:"children,omitempty"`
+}
+
+// ChromeBookmarkRoot represents the root structure of Chrome bookmarks
+type ChromeBookmarkRoot struct {
+	Checksum string `json:"checksum"`
+	Roots    struct {
+		BookmarkBar ChromeBookmark `json:"bookmark_bar"`
+		Other       ChromeBookmark `json:"other"`
+		Synced      ChromeBookmark `json:"synced"`
+	} `json:"roots"`
+	Version int `json:"version"`
+}
+
+// ImportChromeBookmarks imports bookmarks from Chrome JSON format
+func (a *App) ImportChromeBookmarks(jsonData string) (int, error) {
+	var chromeData ChromeBookmarkRoot
+	if err := json.Unmarshal([]byte(jsonData), &chromeData); err != nil {
+		return 0, err
+	}
+
+	var importedCount int
+	defaultCategory := "导入"
+
+	// Ensure default category exists
+	categories, _ := a.GetCategories()
+	hasDefaultCategory := false
+	for _, cat := range categories {
+		if cat.Name == defaultCategory {
+			hasDefaultCategory = true
+			break
+		}
+	}
+
+	if !hasDefaultCategory {
+		a.AddCategory(defaultCategory, "从浏览器导入的书签", "#6366f1")
+	}
+
+	// Parse bookmark bar
+	if err := a.parseChromeBookmarks(chromeData.Roots.BookmarkBar.Children, defaultCategory, &importedCount); err != nil {
+		return importedCount, err
+	}
+
+	// Parse other bookmarks
+	if err := a.parseChromeBookmarks(chromeData.Roots.Other.Children, defaultCategory, &importedCount); err != nil {
+		return importedCount, err
+	}
+
+	return importedCount, nil
+}
+
+// parseChromeBookmarks recursively parses Chrome bookmark structure
+func (a *App) parseChromeBookmarks(bookmarks []ChromeBookmark, category string, count *int) error {
+	for _, bookmark := range bookmarks {
+		if bookmark.Type == "url" && bookmark.URL != "" {
+			_, err := a.AddURL(bookmark.Name, bookmark.URL, "", category, []string{})
+			if err != nil {
+				continue // Skip invalid bookmarks
+			}
+			*count++
+		} else if bookmark.Type == "folder" && len(bookmark.Children) > 0 {
+			// Use folder name as category or subcategory info
+			folderCategory := category
+			if bookmark.Name != "" {
+				folderCategory = bookmark.Name
+			}
+			a.parseChromeBookmarks(bookmark.Children, folderCategory, count)
+		}
+	}
+	return nil
+}
+
+// ImportNetscapeBookmarks imports bookmarks from Netscape HTML format
+func (a *App) ImportNetscapeBookmarks(htmlData string) (int, error) {
+	var importedCount int
+	defaultCategory := "导入"
+
+	// Ensure default category exists
+	categories, _ := a.GetCategories()
+	hasDefaultCategory := false
+	for _, cat := range categories {
+		if cat.Name == defaultCategory {
+			hasDefaultCategory = true
+			break
+		}
+	}
+
+	if !hasDefaultCategory {
+		a.AddCategory(defaultCategory, "从浏览器导入的书签", "#6366f1")
+	}
+
+	// Parse HTML bookmarks using regex
+	linkRegex := regexp.MustCompile(`<A[^>]+HREF="([^"]+)"[^>]*>([^<]+)</A>`)
+	matches := linkRegex.FindAllStringSubmatch(htmlData, -1)
+
+	for _, match := range matches {
+		if len(match) >= 3 {
+			url := match[1]
+			title := match[2]
+
+			if url != "" && title != "" {
+				_, err := a.AddURL(title, url, "", defaultCategory, []string{})
+				if err != nil {
+					continue // Skip invalid bookmarks
+				}
+				importedCount++
+			}
+		}
+	}
+
+	return importedCount, nil
 }
 

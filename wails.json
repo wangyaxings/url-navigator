@@ -20,7 +20,7 @@
     "productDescription": "A beautiful URL bookmark manager",
     "companyName": "URLNavigator",
     "copyright": "Copyright © 2025 URLNavigator. All rights reserved.",
-    "version": "1.2.0"
+    "version": "1.2.1"
   },
   "nsisType": "single",
   "build": {
