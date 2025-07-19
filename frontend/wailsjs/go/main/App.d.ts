@@ -26,6 +26,8 @@ export function GetDataDir():Promise<string>;
 
 export function GetURLs():Promise<Array<main.URLItem>>;
 
+export function GetUpdateProgress():Promise<main.UpdateProgress>;
+
 export function GetVersionInfo():Promise<main.VersionInfo>;
 
 export function ImportChromeBookmarks(arg1:string):Promise<number>;
@@ -33,6 +35,8 @@ export function ImportChromeBookmarks(arg1:string):Promise<number>;
 export function ImportNetscapeBookmarks(arg1:string):Promise<number>;
 
 export function ReorderURLs(arg1:Array<string>):Promise<void>;
+
+export function RestartApplication():Promise<void>;
 
 export function SaveCategories(arg1:Array<main.Category>):Promise<void>;
 

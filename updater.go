@@ -3,10 +3,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/minio/selfupdate"
@@ -20,6 +25,18 @@ type UpdateInfo struct {
 	UpdateURL      string `json:"updateUrl"`
 	ReleaseNotes   string `json:"releaseNotes"`
 	ErrorMessage   string `json:"errorMessage,omitempty"`
+}
+
+// UpdateProgress represents download progress information
+type UpdateProgress struct {
+	Phase          string `json:"phase"`          // "downloading", "installing", "completed", "error"
+	Progress       int    `json:"progress"`       // 0-100
+	Speed          string `json:"speed"`          // Download speed (e.g. "1.2 MB/s")
+	ETA            string `json:"eta"`            // Estimated time (e.g. "2m 30s")
+	Downloaded     int64  `json:"downloaded"`     // Bytes downloaded
+	Total          int64  `json:"total"`          // Total bytes
+	Message        string `json:"message"`        // Status message
+	Error          string `json:"error,omitempty"` // Error message if any
 }
 
 // CheckForUpdates 检查是否有新版本可用
@@ -197,6 +214,54 @@ func findWindowsExecutable(assets []struct {
 	return ""
 }
 
+var (
+	// 全局更新进度状态
+	updateProgressMutex sync.RWMutex
+	currentUpdateProgress *UpdateProgress
+)
+
+// GetUpdateProgress 获取当前更新进度
+func (a *App) GetUpdateProgress() *UpdateProgress {
+	updateProgressMutex.RLock()
+	defer updateProgressMutex.RUnlock()
+
+	if currentUpdateProgress == nil {
+		return &UpdateProgress{
+			Phase:    "idle",
+			Progress: 0,
+			Message:  "准备就绪",
+		}
+	}
+
+	// 返回副本以避免并发问题
+	progress := *currentUpdateProgress
+	return &progress
+}
+
+// setUpdateProgress 设置更新进度
+func setUpdateProgress(progress *UpdateProgress) {
+	updateProgressMutex.Lock()
+	defer updateProgressMutex.Unlock()
+	currentUpdateProgress = progress
+}
+
+// ProgressReader wraps an io.Reader and provides progress tracking
+type ProgressReader struct {
+	reader      io.Reader
+	total       int64
+	downloaded  int64
+	onProgress  func(downloaded, total int64)
+}
+
+func (pr *ProgressReader) Read(p []byte) (int, error) {
+	n, err := pr.reader.Read(p)
+	pr.downloaded += int64(n)
+	if pr.onProgress != nil {
+		pr.onProgress(pr.downloaded, pr.total)
+	}
+	return n, err
+}
+
 // DownloadAndApplyUpdate 下载并应用更新
 func (a *App) DownloadAndApplyUpdate(updateURL string) error {
 	if updateURL == "" {
@@ -208,25 +273,113 @@ func (a *App) DownloadAndApplyUpdate(updateURL string) error {
 		return fmt.Errorf("自动更新功能仅支持Windows版本")
 	}
 
+	// 初始化进度
+	setUpdateProgress(&UpdateProgress{
+		Phase:    "downloading",
+		Progress: 0,
+		Message:  "正在准备下载...",
+	})
+
 	// 创建HTTP客户端
 	client := &http.Client{
-		Timeout: 10 * time.Minute, // 10分钟超时，用于下载
+		Timeout: 30 * time.Minute, // 30分钟超时，用于大文件下载
 	}
 
-	// 下载新版本
+	// 发起下载请求
 	resp, err := client.Get(updateURL)
 	if err != nil {
+		setUpdateProgress(&UpdateProgress{
+			Phase:   "error",
+			Message: "下载失败",
+			Error:   fmt.Sprintf("网络连接失败: %v", err),
+		})
 		return fmt.Errorf("下载更新失败: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		setUpdateProgress(&UpdateProgress{
+			Phase:   "error",
+			Message: "下载失败",
+			Error:   fmt.Sprintf("HTTP状态码: %d", resp.StatusCode),
+		})
 		return fmt.Errorf("下载失败，状态码: %d", resp.StatusCode)
 	}
 
+	// 获取文件大小
+	contentLength := resp.ContentLength
+	if contentLength <= 0 {
+		contentLength = 10 * 1024 * 1024 // 默认10MB，如果服务器没有提供文件大小
+	}
+
+	setUpdateProgress(&UpdateProgress{
+		Phase:      "downloading",
+		Progress:   0,
+		Downloaded: 0,
+		Total:      contentLength,
+		Message:    "正在下载更新...",
+	})
+
+	// 创建进度追踪器
+	startTime := time.Now()
+	progressReader := &ProgressReader{
+		reader: resp.Body,
+		total:  contentLength,
+		onProgress: func(downloaded, total int64) {
+			elapsed := time.Since(startTime)
+
+			// 计算进度百分比
+			progress := int((downloaded * 100) / total)
+			if progress > 100 {
+				progress = 100
+			}
+
+			// 计算下载速度
+			speed := ""
+			if elapsed.Seconds() > 0 {
+				bytesPerSecond := float64(downloaded) / elapsed.Seconds()
+				speed = formatBytes(int64(bytesPerSecond)) + "/s"
+			}
+
+			// 计算剩余时间
+			eta := ""
+			if downloaded > 0 && elapsed.Seconds() > 1 {
+				remainingBytes := total - downloaded
+				bytesPerSecond := float64(downloaded) / elapsed.Seconds()
+				if bytesPerSecond > 0 {
+					remainingSeconds := float64(remainingBytes) / bytesPerSecond
+					eta = formatDuration(time.Duration(remainingSeconds) * time.Second)
+				}
+			}
+
+			setUpdateProgress(&UpdateProgress{
+				Phase:      "downloading",
+				Progress:   progress,
+				Speed:      speed,
+				ETA:        eta,
+				Downloaded: downloaded,
+				Total:      total,
+				Message:    fmt.Sprintf("已下载 %s / %s", formatBytes(downloaded), formatBytes(total)),
+			})
+		},
+	}
+
+	// 开始安装阶段
+	setUpdateProgress(&UpdateProgress{
+		Phase:    "installing",
+		Progress: 90,
+		Message:  "正在安装更新...",
+	})
+
 	// 使用selfupdate进行更新
-	err = selfupdate.Apply(resp.Body, selfupdate.Options{})
+	err = selfupdate.Apply(progressReader, selfupdate.Options{})
 	if err != nil {
+		setUpdateProgress(&UpdateProgress{
+			Phase:   "error",
+			Message: "安装失败",
+			Error:   fmt.Sprintf("更新失败: %v", err),
+		})
+
 		// 尝试回滚失败的更新
 		if rollbackErr := selfupdate.RollbackError(err); rollbackErr != nil {
 			return fmt.Errorf("更新失败且回滚失败: %v, 回滚错误: %v", err, rollbackErr)
@@ -234,7 +387,79 @@ func (a *App) DownloadAndApplyUpdate(updateURL string) error {
 		return fmt.Errorf("更新失败: %v", err)
 	}
 
+	// 更新完成
+	setUpdateProgress(&UpdateProgress{
+		Phase:    "completed",
+		Progress: 100,
+		Message:  "更新完成，准备重启应用...",
+	})
+
+	// 延迟重启，给前端时间显示完成消息
+	go func() {
+		time.Sleep(2 * time.Second)
+		a.RestartApplication()
+	}()
+
 	return nil
+}
+
+// RestartApplication 重启应用程序
+func (a *App) RestartApplication() error {
+	// 获取当前可执行文件路径
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("无法获取可执行文件路径: %v", err)
+	}
+
+	// 在Windows上重启应用
+	if runtime.GOOS == "windows" {
+		// 使用 cmd /c start 来启动新实例并退出当前实例
+		cmd := exec.Command("cmd", "/c", "start", "/b", exePath)
+		cmd.Dir = filepath.Dir(exePath)
+
+		// 启动新实例
+		err := cmd.Start()
+		if err != nil {
+			return fmt.Errorf("重启失败: %v", err)
+		}
+
+		// 退出当前实例
+		go func() {
+			time.Sleep(500 * time.Millisecond) // 给新实例启动时间
+			os.Exit(0)
+		}()
+
+		return nil
+	}
+
+	return fmt.Errorf("当前平台不支持自动重启")
+}
+
+// formatBytes 格式化字节数为人类可读格式
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// formatDuration 格式化时间段为人类可读格式
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
 // compareVersions 比较两个版本号

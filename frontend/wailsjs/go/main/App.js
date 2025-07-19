@@ -50,6 +50,10 @@ export function GetURLs() {
   return window['go']['main']['App']['GetURLs']();
 }
 
+export function GetUpdateProgress() {
+  return window['go']['main']['App']['GetUpdateProgress']();
+}
+
 export function GetVersionInfo() {
   return window['go']['main']['App']['GetVersionInfo']();
 }
@@ -64,6 +68,10 @@ export function ImportNetscapeBookmarks(arg1) {
 
 export function ReorderURLs(arg1) {
   return window['go']['main']['App']['ReorderURLs'](arg1);
+}
+
+export function RestartApplication() {
+  return window['go']['main']['App']['RestartApplication']();
 }
 
 export function SaveCategories(arg1) {

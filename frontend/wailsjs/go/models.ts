@@ -112,6 +112,32 @@ export namespace main {
 	        this.errorMessage = source["errorMessage"];
 	    }
 	}
+	export class UpdateProgress {
+	    phase: string;
+	    progress: number;
+	    speed: string;
+	    eta: string;
+	    downloaded: number;
+	    total: number;
+	    message: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateProgress(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.phase = source["phase"];
+	        this.progress = source["progress"];
+	        this.speed = source["speed"];
+	        this.eta = source["eta"];
+	        this.downloaded = source["downloaded"];
+	        this.total = source["total"];
+	        this.message = source["message"];
+	        this.error = source["error"];
+	    }
+	}
 	export class VersionInfo {
 	    version: string;
 	    github_owner: string;
