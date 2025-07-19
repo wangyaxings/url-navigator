@@ -17,10 +17,15 @@
   },
   "info": {
     "productName": "URL Navigator",
-    "productDescription": "A beautiful URL bookmark manager",
+    "productDescription": "A beautiful URL bookmark manager with auto-update functionality",
     "companyName": "URLNavigator",
     "copyright": "Copyright © 2025 URLNavigator. All rights reserved.",
     "version": "1.2.1"
+  },
+  "github": {
+    "owner": "wangyaxings",
+    "repo": "url-navigator",
+    "comment": "GitHub repository information for auto-update functionality"
   },
   "nsisType": "single",
   "build": {
@@ -30,7 +35,14 @@
       "-trimpath"
     ],
     "ldflags": [
-      "-s", "-w"
+      "-s", "-w",
+      "-X main.Version={{.Info.Version}}",
+      "-X main.GitHubOwner={{.GitHub.Owner}}",
+      "-X main.GitHubRepo={{.GitHub.Repo}}"
     ]
+  },
+  "buildSettings": {
+    "generateVersionInfo": true,
+    "embedVersionInfo": true
   }
 }

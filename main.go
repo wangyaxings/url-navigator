@@ -27,6 +27,15 @@ func NewApp() *App {
 // OnStartup is called when the app starts
 func (a *App) OnStartup(ctx context.Context) {
 	a.ctx = ctx
+
+	// 初始化版本信息
+	dataDir := a.GetDataDir()
+	if err := InitVersionInfo(dataDir); err != nil {
+		// 记录错误但不阻止应用启动
+		fmt.Printf("警告: 版本信息初始化失败: %v\n", err)
+	} else {
+		fmt.Printf("版本信息初始化成功: %s\n", RuntimeVersion.Version)
+	}
 }
 
 func main() {

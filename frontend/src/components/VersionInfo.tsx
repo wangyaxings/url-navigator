@@ -1,16 +1,43 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Info, Github, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import * as AppService from '../../wailsjs/go/main/App';
 
-// 从package.json获取版本信息
-const APP_VERSION = '1.2.1';
-const BUILD_DATE = new Date().toLocaleDateString('zh-CN');
+interface VersionData {
+  version: string;
+  github_owner: string;
+  github_repo: string;
+  app_name: string;
+}
 
 export function VersionInfo() {
   const [isOpen, setIsOpen] = useState(false);
+  const [versionData, setVersionData] = useState<VersionData>({
+    version: '1.2.1',
+    github_owner: 'wangyaxings',
+    github_repo: 'url-navigator',
+    app_name: 'URLNavigator'
+  });
+  const [buildDate] = useState(new Date().toLocaleDateString('zh-CN'));
+
+  useEffect(() => {
+    const loadVersionInfo = async () => {
+      try {
+        const data = await AppService.GetVersionInfo();
+        if (data && data.version) {
+          setVersionData(data);
+        }
+      } catch (error) {
+        console.warn('Failed to get version info from backend:', error);
+        // 使用默认值，已在useState中设置
+      }
+    };
+
+    loadVersionInfo();
+  }, []);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -21,7 +48,7 @@ export function VersionInfo() {
           className="text-xs text-muted-foreground hover:text-foreground"
         >
           <Info className="h-3 w-3 mr-1" />
-          v{APP_VERSION}
+          v{versionData.version}
         </Button>
       </DialogTrigger>
 
@@ -29,7 +56,7 @@ export function VersionInfo() {
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <Info className="h-5 w-5 mr-2" />
-            关于 URL Navigator
+            关于 {versionData.app_name}
           </DialogTitle>
           <DialogDescription>
             智能书签管理工具
@@ -44,11 +71,11 @@ export function VersionInfo() {
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">当前版本</span>
-                <Badge variant="secondary">v{APP_VERSION}</Badge>
+                <Badge variant="secondary">v{versionData.version}</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">构建日期</span>
-                <span className="text-sm text-muted-foreground">{BUILD_DATE}</span>
+                <span className="text-sm text-muted-foreground">{buildDate}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">技术栈</span>
@@ -59,7 +86,7 @@ export function VersionInfo() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg">更新内容 v1.2.1</CardTitle>
+              <CardTitle className="text-lg">更新内容 v{versionData.version}</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="text-sm text-muted-foreground space-y-1">
@@ -77,7 +104,7 @@ export function VersionInfo() {
           <div className="flex items-center justify-between pt-2 border-t">
             <div className="flex items-center space-x-2">
               <Button variant="outline" size="sm" asChild>
-                <a href="https://github.com/urlnavigator/urlnavigator" target="_blank" rel="noopener noreferrer">
+                <a href={`https://github.com/${versionData.github_owner}/${versionData.github_repo}`} target="_blank" rel="noopener noreferrer">
                   <Github className="h-4 w-4 mr-1" />
                   GitHub
                   <ExternalLink className="h-3 w-3 ml-1" />
@@ -96,9 +123,26 @@ export function VersionInfo() {
 
 // 简单版本号显示组件
 export function SimpleVersionInfo() {
+  const [version, setVersion] = useState('1.2.1');
+
+  useEffect(() => {
+    const loadVersion = async () => {
+      try {
+        const versionStr = await AppService.GetCurrentVersion();
+        if (versionStr) {
+          setVersion(versionStr);
+        }
+      } catch (error) {
+        console.warn('Failed to get version:', error);
+      }
+    };
+
+    loadVersion();
+  }, []);
+
   return (
     <div className="text-xs text-muted-foreground">
-      v{APP_VERSION}
+      v{version}
     </div>
   );
 }

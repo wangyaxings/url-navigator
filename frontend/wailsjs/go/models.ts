@@ -96,6 +96,7 @@ export namespace main {
 	    latestVersion: string;
 	    updateUrl: string;
 	    releaseNotes: string;
+	    errorMessage?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
@@ -108,6 +109,25 @@ export namespace main {
 	        this.latestVersion = source["latestVersion"];
 	        this.updateUrl = source["updateUrl"];
 	        this.releaseNotes = source["releaseNotes"];
+	        this.errorMessage = source["errorMessage"];
+	    }
+	}
+	export class VersionInfo {
+	    version: string;
+	    github_owner: string;
+	    github_repo: string;
+	    app_name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.github_owner = source["github_owner"];
+	        this.github_repo = source["github_repo"];
+	        this.app_name = source["app_name"];
 	    }
 	}
 

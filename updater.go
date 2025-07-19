@@ -19,18 +19,24 @@ type UpdateInfo struct {
 	LatestVersion  string `json:"latestVersion"`
 	UpdateURL      string `json:"updateUrl"`
 	ReleaseNotes   string `json:"releaseNotes"`
+	ErrorMessage   string `json:"errorMessage,omitempty"`
 }
 
-const (
-	CurrentVersion = "1.2.0"
-	// GitHub仓库信息 - 请替换为您的实际仓库信息
-	GitHubOwner = "YOUR_GITHUB_USERNAME"  // 替换为您的GitHub用户名
-	GitHubRepo  = "url-navigator"         // 替换为您的仓库名
-)
-
-// CheckForUpdates checks if there's a new version available using GitHub API
+// CheckForUpdates 检查是否有新版本可用
 func (a *App) CheckForUpdates() UpdateInfo {
-	currentVersion := CurrentVersion
+	// 确保版本信息已初始化
+	if RuntimeVersion == nil {
+		return UpdateInfo{
+			HasUpdate:      false,
+			CurrentVersion: "unknown",
+			LatestVersion:  "unknown",
+			UpdateURL:      "",
+			ReleaseNotes:   "",
+			ErrorMessage:   "版本信息未初始化，请检查配置",
+		}
+	}
+
+	currentVersion := RuntimeVersion.Version
 
 	// 仅在Windows上支持自动更新
 	if runtime.GOOS != "windows" {
@@ -43,8 +49,21 @@ func (a *App) CheckForUpdates() UpdateInfo {
 		}
 	}
 
+	// 检查GitHub仓库信息是否配置
+	if RuntimeVersion.GitHubOwner == "" || RuntimeVersion.GitHubRepo == "" {
+		return UpdateInfo{
+			HasUpdate:      false,
+			CurrentVersion: currentVersion,
+			LatestVersion:  currentVersion,
+			UpdateURL:      "",
+			ReleaseNotes:   "",
+			ErrorMessage:   "GitHub仓库信息未配置，无法检查更新。请配置GitHub用户名和仓库名。",
+		}
+	}
+
 	// 构建GitHub API URL
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", GitHubOwner, GitHubRepo)
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest",
+		RuntimeVersion.GitHubOwner, RuntimeVersion.GitHubRepo)
 
 	// 创建HTTP客户端，设置超时
 	client := &http.Client{
@@ -59,7 +78,8 @@ func (a *App) CheckForUpdates() UpdateInfo {
 			CurrentVersion: currentVersion,
 			LatestVersion:  currentVersion,
 			UpdateURL:      "",
-			ReleaseNotes:   fmt.Sprintf("网络连接失败: %v", err),
+			ReleaseNotes:   "",
+			ErrorMessage:   fmt.Sprintf("网络连接失败: %v", err),
 		}
 	}
 	defer resp.Body.Close()
@@ -69,13 +89,14 @@ func (a *App) CheckForUpdates() UpdateInfo {
 		errorMsg := ""
 		switch resp.StatusCode {
 		case 404:
-			errorMsg = "仓库未找到或没有发布版本"
+			errorMsg = fmt.Sprintf("仓库 %s/%s 未找到或没有发布版本",
+				RuntimeVersion.GitHubOwner, RuntimeVersion.GitHubRepo)
 		case 403:
-			errorMsg = "API访问限制，请稍后重试"
+			errorMsg = "GitHub API访问限制，请稍后重试"
 		case 429:
 			errorMsg = "请求过于频繁，请稍后重试"
 		default:
-			errorMsg = fmt.Sprintf("API请求失败，状态码: %d", resp.StatusCode)
+			errorMsg = fmt.Sprintf("GitHub API请求失败，状态码: %d", resp.StatusCode)
 		}
 
 		return UpdateInfo{
@@ -83,7 +104,8 @@ func (a *App) CheckForUpdates() UpdateInfo {
 			CurrentVersion: currentVersion,
 			LatestVersion:  currentVersion,
 			UpdateURL:      "",
-			ReleaseNotes:   errorMsg,
+			ReleaseNotes:   "",
+			ErrorMessage:   errorMsg,
 		}
 	}
 
@@ -105,7 +127,8 @@ func (a *App) CheckForUpdates() UpdateInfo {
 			CurrentVersion: currentVersion,
 			LatestVersion:  currentVersion,
 			UpdateURL:      "",
-			ReleaseNotes:   fmt.Sprintf("解析更新信息失败: %v", err),
+			ReleaseNotes:   "",
+			ErrorMessage:   fmt.Sprintf("解析GitHub响应失败: %v", err),
 		}
 	}
 
@@ -118,22 +141,16 @@ func (a *App) CheckForUpdates() UpdateInfo {
 	var updateURL string
 	if hasUpdate {
 		// 查找Windows可执行文件
-		for _, asset := range release.Assets {
-			// 查找 URLNavigator.exe 文件
-			if asset.Name == "URLNavigator.exe" {
-				updateURL = asset.BrowserDownloadURL
-				break
-			}
-		}
+		updateURL = findWindowsExecutable(release.Assets)
 
-		// 如果没找到确切的文件名，尝试查找包含.exe的文件
 		if updateURL == "" {
-			for _, asset := range release.Assets {
-				if strings.HasSuffix(strings.ToLower(asset.Name), ".exe") &&
-				   strings.Contains(strings.ToLower(asset.Name), "urlnavigator") {
-					updateURL = asset.BrowserDownloadURL
-					break
-				}
+			return UpdateInfo{
+				HasUpdate:      true,
+				CurrentVersion: currentVersion,
+				LatestVersion:  latestVersion,
+				UpdateURL:      "",
+				ReleaseNotes:   release.Body,
+				ErrorMessage:   "新版本可用，但未找到Windows安装包",
 			}
 		}
 	}
@@ -147,7 +164,39 @@ func (a *App) CheckForUpdates() UpdateInfo {
 	}
 }
 
-// DownloadAndApplyUpdate downloads and applies an update using selfupdate
+// findWindowsExecutable 查找Windows可执行文件
+func findWindowsExecutable(assets []struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+	Size              int    `json:"size"`
+}) string {
+	// 优先查找确切的文件名
+	for _, asset := range assets {
+		if asset.Name == "URLNavigator.exe" {
+			return asset.BrowserDownloadURL
+		}
+	}
+
+	// 查找包含应用名称的.exe文件
+	for _, asset := range assets {
+		name := strings.ToLower(asset.Name)
+		if strings.HasSuffix(name, ".exe") &&
+		   (strings.Contains(name, "urlnavigator") || strings.Contains(name, "url-navigator")) {
+			return asset.BrowserDownloadURL
+		}
+	}
+
+	// 查找任何.exe文件
+	for _, asset := range assets {
+		if strings.HasSuffix(strings.ToLower(asset.Name), ".exe") {
+			return asset.BrowserDownloadURL
+		}
+	}
+
+	return ""
+}
+
+// DownloadAndApplyUpdate 下载并应用更新
 func (a *App) DownloadAndApplyUpdate(updateURL string) error {
 	if updateURL == "" {
 		return fmt.Errorf("无效的更新URL")
@@ -187,13 +236,8 @@ func (a *App) DownloadAndApplyUpdate(updateURL string) error {
 	return nil
 }
 
-// GetCurrentVersion returns the current version
-func (a *App) GetCurrentVersion() string {
-	return CurrentVersion
-}
-
-// compareVersions compares two version strings using semantic versioning
-// Returns: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
+// compareVersions 比较两个版本号
+// 返回: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
 func compareVersions(v1, v2 string) int {
 	// 清理版本字符串
 	v1 = strings.TrimPrefix(strings.TrimSpace(v1), "v")
@@ -242,23 +286,24 @@ func compareVersions(v1, v2 string) int {
 	return 0
 }
 
-// TestUpdateAvailable simulates an update being available (for testing)
+// TestUpdateAvailable 模拟有更新可用（用于测试）
 func (a *App) TestUpdateAvailable() UpdateInfo {
 	return UpdateInfo{
 		HasUpdate:      true,
-		CurrentVersion: CurrentVersion,
+		CurrentVersion: a.GetCurrentVersion(),
 		LatestVersion:  "999.999.999",
 		UpdateURL:      "https://example.com/test-update.exe",
 		ReleaseNotes:   "这是一个测试更新\n\n新功能:\n- 测试功能1\n- 测试功能2\n\n修复:\n- 修复了测试问题",
 	}
 }
 
-// TestNoUpdate simulates no update being available (for testing)
+// TestNoUpdate 模拟没有更新可用（用于测试）
 func (a *App) TestNoUpdate() UpdateInfo {
+	currentVersion := a.GetCurrentVersion()
 	return UpdateInfo{
 		HasUpdate:      false,
-		CurrentVersion: CurrentVersion,
-		LatestVersion:  CurrentVersion,
+		CurrentVersion: currentVersion,
+		LatestVersion:  currentVersion,
 		UpdateURL:      "",
 		ReleaseNotes:   "当前已是最新版本",
 	}

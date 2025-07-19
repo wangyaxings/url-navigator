@@ -50,6 +50,10 @@ export function GetURLs() {
   return window['go']['main']['App']['GetURLs']();
 }
 
+export function GetVersionInfo() {
+  return window['go']['main']['App']['GetVersionInfo']();
+}
+
 export function ImportChromeBookmarks(arg1) {
   return window['go']['main']['App']['ImportChromeBookmarks'](arg1);
 }
@@ -84,4 +88,8 @@ export function TestUpdateAvailable() {
 
 export function UpdateURL(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['UpdateURL'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function UpdateVersionConfig(arg1, arg2) {
+  return window['go']['main']['App']['UpdateVersionConfig'](arg1, arg2);
 }
