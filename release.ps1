@@ -94,8 +94,20 @@ function Invoke-GitPushWithRetry {
             # 执行 Git 命令
             $result = Invoke-Expression "$Command 2>&1"
 
-            if ($LASTEXITCODE -eq 0) {
-                Write-Success "✅ $Description completed successfully"
+                        # 检查是否成功 - 包括多种成功状态
+            $isSuccess = $LASTEXITCODE -eq 0
+            $isAlreadyUpToDate = $result -match "Everything up-to-date"
+            $isTagAlreadyExists = $result -match "already exists"
+
+            # 这些情况都应该被视为成功
+            if ($isSuccess -or $isAlreadyUpToDate -or ($isTagAlreadyExists -and $Command -match "git tag")) {
+                if ($isAlreadyUpToDate) {
+                    Write-Success "✅ $Description - Everything is already up-to-date"
+                } elseif ($isTagAlreadyExists -and $Command -match "git tag") {
+                    Write-Success "✅ $Description - Tag already exists (no action needed)"
+                } else {
+                    Write-Success "✅ $Description completed successfully"
+                }
                 return $true
             }
             else {
@@ -641,12 +653,18 @@ function Invoke-GitOperations($NewVersion, $Config) {
     $tagMessage = $Config.release.tag_message_template -replace '\{version\}', $NewVersion.WithV
 
     $result = git tag -a $NewVersion.WithV -m $tagMessage 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    $tagAlreadyExists = $result -match "already exists"
+
+    if ($LASTEXITCODE -ne 0 -and -not $tagAlreadyExists) {
         Write-Error "Failed to create tag: $result"
         throw "Tag creation failed"
     }
 
-    Write-Success "Tag created successfully"
+    if ($tagAlreadyExists) {
+        Write-Success "Tag $($NewVersion.WithV) already exists (no action needed)"
+    } else {
+        Write-Success "Tag created successfully"
+    }
 
     # Test GitHub connectivity before pushing
     $connectivityOk = Test-GitHubConnectivity
