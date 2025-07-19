@@ -15,6 +15,7 @@ import { URLListView } from '@/components/URLListView';
 import { LayoutControls, ViewMode, GridColumns } from '@/components/LayoutControls';
 import { KeyboardShortcutsHelp, KeyboardShortcutTooltip } from '@/components/KeyboardShortcutsHelp';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { ContextMenu } from '@/components/ContextMenu';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
 
@@ -34,8 +35,19 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [gridColumns, setGridColumns] = useState<GridColumns>(4);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isHelpDialogOpen, setIsHelpDialogOpen] = useState(false);
+    const [isHelpDialogOpen, setIsHelpDialogOpen] = useState(false);
   const [showShortcutTooltip, setShowShortcutTooltip] = useState(true);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    isOpen: boolean;
+    position: { x: number; y: number };
+    url: URLItem | null;
+  }>({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    url: null
+  });
 
   // Refs for keyboard shortcuts
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +159,41 @@ function App() {
   const handleTriggerAdvancedSearch = () => {
     if (advancedSearchTriggerRef.current) {
       advancedSearchTriggerRef.current.click();
+    }
+  };
+
+  // 右键菜单处理函数
+  const handleContextMenu = (event: React.MouseEvent, url: URLItem) => {
+    setContextMenu({
+      isOpen: true,
+      position: { x: event.clientX, y: event.clientY },
+      url
+    });
+  };
+
+  const handleCloseContextMenu = () => {
+    setContextMenu({
+      isOpen: false,
+      position: { x: 0, y: 0 },
+      url: null
+    });
+  };
+
+  const handleCopyUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      // 可以在这里添加提示
+    } catch (error) {
+      console.error('Failed to copy URL:', error);
+    }
+  };
+
+  const handleCopyTitle = async (title: string) => {
+    try {
+      await navigator.clipboard.writeText(title);
+      // 可以在这里添加提示
+    } catch (error) {
+      console.error('Failed to copy title:', error);
     }
   };
 
@@ -295,6 +342,7 @@ function App() {
               onOpen={openURL}
               getCategoryColor={getCategoryColor}
               isDragEnabled={true}
+              onContextMenu={handleContextMenu}
             />
           ) : (
             <DndContext
@@ -316,6 +364,7 @@ function App() {
                         onDelete={setDeleteDialogURL}
                         onOpen={openURL}
                         getCategoryColor={getCategoryColor}
+                        onContextMenu={handleContextMenu}
                       />
                     ))}
                 </div>
@@ -397,12 +446,25 @@ function App() {
               className="absolute -top-2 -right-2 h-6 w-6 p-0 rounded-full bg-background border"
             >
               ×
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+                         </Button>
+           </div>
+         )}
+
+         {/* 右键菜单 */}
+         <ContextMenu
+           isOpen={contextMenu.isOpen}
+           position={contextMenu.position}
+           url={contextMenu.url}
+           onClose={handleCloseContextMenu}
+           onEdit={setEditingURL}
+           onDelete={setDeleteDialogURL}
+           onOpen={openURL}
+           onCopyUrl={handleCopyUrl}
+           onCopyTitle={handleCopyTitle}
+         />
+       </div>
+     </div>
+   );
 }
 
 export default App;

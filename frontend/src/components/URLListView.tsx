@@ -9,6 +9,7 @@ interface URLListViewProps {
   onOpen: (url: string) => void;
   getCategoryColor: (category: string) => string;
   isDragEnabled?: boolean;
+  onContextMenu?: (event: React.MouseEvent, url: URLItem) => void;
 }
 
 export function URLListView({
@@ -17,7 +18,8 @@ export function URLListView({
   onDelete,
   onOpen,
   getCategoryColor,
-  isDragEnabled = false
+  isDragEnabled = false,
+  onContextMenu
 }: URLListViewProps) {
   return (
     <div className="space-y-2">
@@ -27,6 +29,10 @@ export function URLListView({
           <div
             key={url.id}
             className="flex items-center space-x-3 p-3 bg-card border border-border rounded-lg hover:shadow-md transition-all duration-200 group"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              onContextMenu?.(e, url);
+            }}
           >
             {/* Drag Handle */}
             {isDragEnabled && (

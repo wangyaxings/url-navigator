@@ -11,6 +11,7 @@ interface DraggableURLCardProps {
   onDelete: (url: URLItem) => void;
   onOpen: (url: string) => void;
   getCategoryColor: (category: string) => string;
+  onContextMenu?: (event: React.MouseEvent, url: URLItem) => void;
 }
 
 export function DraggableURLCard({
@@ -18,7 +19,8 @@ export function DraggableURLCard({
   onEdit,
   onDelete,
   onOpen,
-  getCategoryColor
+  getCategoryColor,
+  onContextMenu
 }: DraggableURLCardProps) {
   const {
     attributes,
@@ -35,12 +37,16 @@ export function DraggableURLCard({
   };
 
   return (
-    <Card
+        <Card
       ref={setNodeRef}
       style={style}
       className={`hover:shadow-lg transition-all duration-200 ${
         isDragging ? 'opacity-50 shadow-xl scale-105' : ''
       }`}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onContextMenu?.(e, url);
+      }}
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
