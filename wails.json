@@ -1,4 +1,4 @@
-﻿{
+{
     "$schema":  "https://wails.io/schemas/config.v2.json",
     "name":  "URLNavigator",
     "outputfilename":  "URLNavigator",
@@ -19,8 +19,8 @@
                  "productName":  "URL Navigator",
                  "productDescription":  "A beautiful URL bookmark manager with auto-update functionality",
                  "companyName":  "URLNavigator",
-                 "copyright":  "Copyright 漏 2025 URLNavigator. All rights reserved.",
-                 "version":  "1.2.1"
+                 "copyright":  "Copyright 婕?2025 URLNavigator. All rights reserved.",
+                 "version":  "1.2.7"
              },
     "github":  {
                    "owner":  "wangyaxings",

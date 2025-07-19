@@ -68,6 +68,21 @@ function Write-Header($Message) {
     Write-Host ""
 }
 
+# Utility function to write JSON without BOM
+function Write-JsonWithoutBOM($Content, $FilePath) {
+    # Use UTF8 encoding without BOM for better compatibility with tools
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        # PowerShell Core/7+ supports UTF8NoBOM
+        $Content | Set-Content $FilePath -Encoding UTF8NoBOM
+    } else {
+        # Windows PowerShell 5.1 - use .NET method to write without BOM
+        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($FilePath, $Content, $utf8NoBom)
+    }
+
+    Write-Info "Written JSON file without BOM: $FilePath"
+}
+
 # Configuration and validation functions
 function Initialize-Configuration {
     Write-Header "URL Navigator Windows Release Tool"
@@ -165,7 +180,9 @@ Build: Automated release with version injection
             }
         }
 
-        $defaultConfig | ConvertTo-Json -Depth 10 | Set-Content $versionFile -Encoding UTF8
+        # Create version.json without BOM
+        $jsonContent = $defaultConfig | ConvertTo-Json -Depth 10
+        Write-JsonWithoutBOM -Content $jsonContent -FilePath $versionFile
         Write-Success "Created $versionFile with default configuration"
     }
 
@@ -342,7 +359,9 @@ function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
             $wailsConfig.github.owner = $GitHubInfo.Owner
             $wailsConfig.github.repo = $GitHubInfo.Repo
 
-            $wailsConfig | ConvertTo-Json -Depth 10 | Set-Content "wails.json" -Encoding UTF8
+            # Write JSON without BOM to avoid encoding issues
+            $jsonContent = $wailsConfig | ConvertTo-Json -Depth 10
+            Write-JsonWithoutBOM -Content $jsonContent -FilePath "wails.json"
             Write-Success "Updated wails.json to version $($NewVersion.WithoutV)"
         }
         catch {
@@ -356,7 +375,10 @@ function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
         try {
             $packageConfig = Get-Content "frontend/package.json" -Raw | ConvertFrom-Json
             $packageConfig.version = $NewVersion.WithoutV
-            $packageConfig | ConvertTo-Json -Depth 10 | Set-Content "frontend/package.json" -Encoding UTF8
+
+            # Write JSON without BOM to avoid encoding issues
+            $jsonContent = $packageConfig | ConvertTo-Json -Depth 10
+            Write-JsonWithoutBOM -Content $jsonContent -FilePath "frontend/package.json"
             Write-Success "Updated frontend/package.json to version $($NewVersion.WithoutV)"
         }
         catch {
@@ -406,18 +428,43 @@ function Build-Application($NewVersion, $GitHubInfo, $Config) {
         "-X main.GitHubRepo=$($GitHubInfo.Repo)"
     )
 
+    # Combine ldflags into a single quoted string
+    $ldflagsString = $ldflags -join " "
+
     $buildArgs = @(
         "build",
         "-platform", $Config.build.platform,
-        "-ldflags", ($ldflags -join " ")
+        "-ldflags", $ldflagsString
     ) + $Config.build.flags
 
-    Write-Info "Build command: wails $($buildArgs -join ' ')"
+            Write-Info "Build command: wails build -platform $($Config.build.platform) -ldflags `"$ldflagsString`" $($Config.build.flags -join ' ')"
 
-    $result = & wails @buildArgs 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Wails application build failed: $result"
-        throw "Build failed"
+    # Execute Wails build - use simpler approach to avoid PowerShell stderr issues
+    Write-Info "Executing Wails build..."
+
+    # Temporarily set ErrorActionPreference to Continue to avoid stderr issues
+    $oldErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+
+    try {
+        # Execute wails command and capture only exit code
+        & wails @buildArgs
+        $buildExitCode = $LASTEXITCODE
+
+        # Restore original error action
+        $ErrorActionPreference = $oldErrorAction
+
+        if ($buildExitCode -ne 0) {
+            Write-Error "Wails build failed with exit code: $buildExitCode"
+            throw "Build failed"
+        }
+
+        Write-Success "Wails build completed successfully (exit code: 0)"
+    }
+    catch {
+        $ErrorActionPreference = $oldErrorAction
+        Write-Error "Failed to execute Wails build: $($_.Exception.Message)"
+        throw "Build execution failed"
     }
 
     # Check build result
