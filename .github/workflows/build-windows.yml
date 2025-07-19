@@ -1,15 +1,34 @@
-name: Build Windows Application
+name: Build and Release
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main", "master" ]
+    tags: [ "v*.*.*" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
+
+env:
+  GO_VERSION: "1.22"
+  NODE_VERSION: "20"
+  WAILS_VERSION: "v2.10.2"
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        platform:
+          - runner: windows-latest
+            name: windows-amd64
+            file: URLNavigator.exe
+          - runner: macos-latest
+            name: darwin-amd64
+            file: URLNavigator.app
+          - runner: ubuntu-latest
+            name: linux-amd64
+            file: URLNavigator
+
+    runs-on: ${{ matrix.platform.runner }}
 
     steps:
       - name: Checkout code
@@ -18,25 +37,37 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: ${{ env.GO_VERSION }}
           cache: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
           cache-dependency-path: frontend/yarn.lock
 
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-      - name: Add Go bin to PATH
+      # Windows specific setup
+      - name: Setup Windows build tools
+        if: matrix.platform.runner == 'windows-latest'
         run: |
-          $goPath = go env GOPATH
-          $goBin = Join-Path $goPath "bin"
-          echo $goBin >> $env:GITHUB_PATH
-        shell: powershell
+          choco install mingw -y
+
+      # macOS specific setup
+      - name: Setup macOS build tools
+        if: matrix.platform.runner == 'macos-latest'
+        run: |
+          xcode-select --install || true
+
+      # Linux specific setup
+      - name: Setup Linux build tools
+        if: matrix.platform.runner == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libwebkit2gtk-4.0-dev
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
 
       - name: Verify Wails installation
         run: wails version
@@ -47,56 +78,143 @@ jobs:
       - name: Verify Go modules
         run: go mod verify
 
-      - name: Generate Wails bindings
-        run: wails generate
-
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
         working-directory: ./frontend
+
+      # 关键步骤：生成Wails绑定文件
+      - name: Generate Wails bindings
+        run: wails generate
 
       - name: Build frontend
         run: yarn build
         working-directory: ./frontend
 
-      - name: Build application with detailed flags
+      - name: Build application
+        shell: bash
         run: |
-          wails build -platform windows/amd64 -ldflags "-H=windowsgui -s -w" -tags production -trimpath -o URLNavigator.exe
-        env:
-          CGO_ENABLED: 1
+          if [ "${{ matrix.platform.runner }}" == "windows-latest" ]; then
+            wails build -platform windows/amd64 -ldflags "-H=windowsgui -s -w" -tags production -trimpath -o URLNavigator.exe
+          elif [ "${{ matrix.platform.runner }}" == "macos-latest" ]; then
+            wails build -platform darwin/amd64 -ldflags "-s -w" -tags production -trimpath
+          else
+            wails build -platform linux/amd64 -ldflags "-s -w" -tags production -trimpath
+          fi
 
       - name: Verify build output
+        shell: bash
         run: |
-          if (Test-Path "./build/bin/URLNavigator.exe") {
-            $fileInfo = Get-Item "./build/bin/URLNavigator.exe"
-            Write-Host "Build successful! File size: $($fileInfo.Length) bytes"
-            Write-Host "File path: $($fileInfo.FullName)"
-          } else {
-            Write-Error "Build failed - URLNavigator.exe not found"
+          if [ -f "build/bin/${{ matrix.platform.file }}" ]; then
+            echo "✅ Build successful! File: build/bin/${{ matrix.platform.file }}"
+            ls -la build/bin/
+          else
+            echo "❌ Build failed - ${{ matrix.platform.file }} not found"
+            ls -la build/ || echo "Build directory not found"
             exit 1
-          }
-        shell: powershell
+          fi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: URLNavigator-windows-amd64
-          path: |
-            build/bin/URLNavigator.exe
+          name: URLNavigator-${{ matrix.platform.name }}
+          path: build/bin/${{ matrix.platform.file }}
           retention-days: 7
 
-      - name: Create release package
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        run: |
-          $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-          $archiveName = "URLNavigator-windows-amd64-$timestamp.zip"
-          Compress-Archive -Path "./build/bin/URLNavigator.exe" -DestinationPath $archiveName
-          Write-Host "Created release package: $archiveName"
-        shell: powershell
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
-      - name: Upload release package
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: actions/upload-artifact@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: URLNavigator-release-package
-          path: "*.zip"
-          retention-days: 30
+          path: ./artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+
+          # Windows
+          if [ -f "./artifacts/URLNavigator-windows-amd64/URLNavigator.exe" ]; then
+            cp "./artifacts/URLNavigator-windows-amd64/URLNavigator.exe" "./release/URLNavigator-windows-amd64.exe"
+          fi
+
+          # macOS
+          if [ -d "./artifacts/URLNavigator-darwin-amd64/URLNavigator.app" ]; then
+            cd "./artifacts/URLNavigator-darwin-amd64/"
+            tar -czf "../../release/URLNavigator-darwin-amd64.tar.gz" URLNavigator.app
+            cd ../../
+          fi
+
+          # Linux
+          if [ -f "./artifacts/URLNavigator-linux-amd64/URLNavigator" ]; then
+            cp "./artifacts/URLNavigator-linux-amd64/URLNavigator" "./release/URLNavigator-linux-amd64"
+            chmod +x "./release/URLNavigator-linux-amd64"
+          fi
+
+          # List all release files
+          ls -la release/
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          # Extract version from tag
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Generate release notes
+          cat > release_notes.md << EOF
+          ## URL Navigator $VERSION
+
+          ### 新功能 / New Features
+          - 🔖 网址书签管理 / Bookmark Management
+          - 📁 分类系统 / Category System
+          - 🔍 智能搜索 / Smart Search
+          - 🚀 自动更新 / Auto Update
+
+          ### 下载 / Downloads
+          - **Windows**: URLNavigator-windows-amd64.exe
+          - **macOS**: URLNavigator-darwin-amd64.tar.gz
+          - **Linux**: URLNavigator-linux-amd64
+
+          ### 安装说明 / Installation
+          1. 下载对应平台的文件 / Download the file for your platform
+          2. Windows: 直接运行 .exe 文件 / Run the .exe file directly
+          3. macOS: 解压后拖拽到应用程序文件夹 / Extract and drag to Applications folder
+          4. Linux: 添加执行权限后运行 / Add execute permission and run
+
+          ### 更新日志 / Changelog
+          请查看提交历史获取详细更新内容 / See commit history for detailed changes
+          EOF
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          name: "URL Navigator ${{ steps.release_notes.outputs.version }}"
+          bodyFile: "release_notes.md"
+          artifacts: "release/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          prerelease: false
+          generateReleaseNotes: true
+
+  # 构建成功后的通知（可选）
+  notify:
+    if: always()
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Status
+        run: |
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "✅ All builds completed successfully!"
+          else
+            echo "❌ Build failed!"
+            exit 1
+          fi

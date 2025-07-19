@@ -29,9 +29,9 @@ frontend/node_modules/
 frontend/.pnp
 frontend/.pnp.js
 
-# Wails runtime generated files
-wailsjs/
-frontend/wailsjs/
+# Wails runtime generated files - 重要：不要忽略这些文件
+# wailsjs/
+# frontend/wailsjs/
 
 # Production build artifacts
 *.app
@@ -228,6 +228,3 @@ ehthumbs_vista.db
 *.msix
 *.msm
 *.msp
-
-# Windows shortcuts
-*.lnk
