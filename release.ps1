@@ -377,13 +377,13 @@ function Get-CurrentVersion {
     if (Test-Path "wails.json") {
         try {
             $wailsConfig = Get-Content "wails.json" -Raw | ConvertFrom-Json
-            if ($wailsConfig.info.productVersion) {
-                Write-Success "Current version detected from wails.json: v$($wailsConfig.info.productVersion)"
-                return $wailsConfig.info.productVersion
+            if ($wailsConfig.info -and $wailsConfig.info.version) {
+                Write-Success "Current version detected from wails.json: v$($wailsConfig.info.version)"
+                return $wailsConfig.info.version
             }
         }
         catch {
-            Write-Warning "Failed to read version from wails.json"
+            Write-Warning "Failed to read version from wails.json: $($_.Exception.Message)"
         }
     }
 
@@ -475,7 +475,19 @@ function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
     if (Test-Path "wails.json") {
         try {
             $wailsConfig = Get-Content "wails.json" -Raw | ConvertFrom-Json
-            $wailsConfig.info.productVersion = $NewVersion.WithoutV
+
+            # Ensure info section exists
+            if (-not $wailsConfig.info) {
+                $wailsConfig | Add-Member -NotePropertyName "info" -NotePropertyValue @{}
+            }
+            $wailsConfig.info.version = $NewVersion.WithoutV
+
+            # Ensure github section exists and update repository info
+            if (-not $wailsConfig.github) {
+                $wailsConfig | Add-Member -NotePropertyName "github" -NotePropertyValue @{}
+            }
+            $wailsConfig.github.owner = $GitHubInfo.Owner
+            $wailsConfig.github.repo = $GitHubInfo.Repo
 
             # Write JSON without BOM to avoid encoding issues
             $jsonContent = $wailsConfig | ConvertTo-Json -Depth 10
