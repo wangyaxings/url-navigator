@@ -16,7 +16,7 @@ interface VersionData {
 export function VersionInfo() {
   const [isOpen, setIsOpen] = useState(false);
   const [versionData, setVersionData] = useState<VersionData>({
-    version: '1.2.1',
+    version: 'v1.2.1',
     github_owner: 'wangyaxings',
     github_repo: 'url-navigator',
     app_name: 'URLNavigator'
@@ -25,11 +25,16 @@ export function VersionInfo() {
 
   useEffect(() => {
     const loadVersionInfo = async () => {
-      try {
-        const data = await AppService.GetVersionInfo();
-        if (data && data.version) {
-          setVersionData(data);
-        }
+              try {
+          const data = await AppService.GetVersionInfo();
+          if (data && data.version) {
+            // Ensure version has v prefix for display
+            const formattedData = {
+              ...data,
+              version: data.version.startsWith('v') ? data.version : `v${data.version}`
+            };
+            setVersionData(formattedData);
+          }
       } catch (error) {
         console.warn('Failed to get version info from backend:', error);
         // 使用默认值，已在useState中设置
@@ -48,7 +53,7 @@ export function VersionInfo() {
           className="text-xs text-muted-foreground hover:text-foreground"
         >
           <Info className="h-3 w-3 mr-1" />
-          v{versionData.version}
+{versionData.version}
         </Button>
       </DialogTrigger>
 
@@ -71,7 +76,7 @@ export function VersionInfo() {
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">当前版本</span>
-                <Badge variant="secondary">v{versionData.version}</Badge>
+                <Badge variant="secondary">{versionData.version}</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">构建日期</span>
@@ -86,7 +91,7 @@ export function VersionInfo() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg">更新内容 v{versionData.version}</CardTitle>
+              <CardTitle className="text-lg">更新内容 {versionData.version}</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="text-sm text-muted-foreground space-y-1">
@@ -123,14 +128,16 @@ export function VersionInfo() {
 
 // 简单版本号显示组件
 export function SimpleVersionInfo() {
-  const [version, setVersion] = useState('1.2.1');
+  const [version, setVersion] = useState('v1.2.1');
 
   useEffect(() => {
     const loadVersion = async () => {
       try {
         const versionStr = await AppService.GetCurrentVersion();
         if (versionStr) {
-          setVersion(versionStr);
+          // Ensure version has v prefix for display
+          const formattedVersion = versionStr.startsWith('v') ? versionStr : `v${versionStr}`;
+          setVersion(formattedVersion);
         }
       } catch (error) {
         console.warn('Failed to get version:', error);
@@ -142,7 +149,7 @@ export function SimpleVersionInfo() {
 
   return (
     <div className="text-xs text-muted-foreground">
-      v{version}
+      {version}
     </div>
   );
 }

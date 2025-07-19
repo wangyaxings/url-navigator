@@ -132,11 +132,12 @@ func (a *App) CheckForUpdates() UpdateInfo {
 		}
 	}
 
-	// 处理版本号（移除v前缀）
+	// 处理版本号（移除v前缀进行比较）
 	latestVersion := strings.TrimPrefix(release.TagName, "v")
+	currentVersionForComparison := strings.TrimPrefix(currentVersion, "v")
 
 	// 比较版本号
-	hasUpdate := compareVersions(currentVersion, latestVersion) < 0
+	hasUpdate := compareVersions(currentVersionForComparison, latestVersion) < 0
 
 	var updateURL string
 	if hasUpdate {

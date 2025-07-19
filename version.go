@@ -63,8 +63,8 @@ func InitVersionInfo(dataDir string) error {
 
 	// 4. 使用默认配置
 	RuntimeVersion = &VersionInfo{
-		Version:     "1.2.0",
-		GitHubOwner: "", // 需要用户配置
+		Version:     "1.2.1",
+		GitHubOwner: "wangyaxings", // 已配置GitHub用户名
 		GitHubRepo:  "url-navigator",
 		AppName:     AppName,
 	}
