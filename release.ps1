@@ -43,6 +43,14 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
+# Git retry configuration
+$GitRetryConfig = @{
+    CodePushRetries = 3      # 代码推送重试次数
+    CodePushDelay = 5        # 代码推送延迟秒数
+    TagPushRetries = 5       # 标签推送重试次数
+    TagPushDelay = 8         # 标签推送延迟秒数
+}
+
 # Color functions for output
 function Write-Info($Message) {
     Write-Host "[INFO] $Message" -ForegroundColor Cyan
@@ -66,6 +74,79 @@ function Write-Header($Message) {
     Write-Host $Message -ForegroundColor Magenta
     Write-Host "==========================================" -ForegroundColor Magenta
     Write-Host ""
+}
+
+# Git 推送重试机制函数
+function Invoke-GitPushWithRetry {
+    param(
+        [string]$Command,
+        [string]$Description,
+        [int]$MaxRetries = 3,
+        [int]$DelaySeconds = 5
+    )
+
+    Write-Info $Description
+
+    for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
+        try {
+            Write-Info "Attempt $attempt/$MaxRetries: $Command"
+
+            # 执行 Git 命令
+            $result = Invoke-Expression "$Command 2>&1"
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "✅ $Description completed successfully"
+                return $true
+            }
+            else {
+                $errorMsg = "Exit code: $LASTEXITCODE, Output: $result"
+
+                if ($attempt -eq $MaxRetries) {
+                    Write-Error "❌ $Description failed after $MaxRetries attempts"
+                    Write-Error $errorMsg
+                    throw "$Description failed: $errorMsg"
+                }
+                else {
+                    Write-Warning "⚠️ Attempt $attempt failed: $errorMsg"
+                    Write-Info "⏱️ Waiting $DelaySeconds seconds before retry..."
+                    Start-Sleep -Seconds $DelaySeconds
+                }
+            }
+        }
+        catch {
+            if ($attempt -eq $MaxRetries) {
+                Write-Error "❌ $Description failed after $MaxRetries attempts"
+                throw $_.Exception
+            }
+            else {
+                Write-Warning "⚠️ Attempt $attempt failed: $($_.Exception.Message)"
+                Write-Info "⏱️ Waiting $DelaySeconds seconds before retry..."
+                Start-Sleep -Seconds $DelaySeconds
+            }
+        }
+    }
+}
+
+# 增强的网络连接测试
+function Test-GitHubConnectivity {
+    Write-Info "🔍 Testing GitHub connectivity..."
+
+    try {
+        # 测试 HTTPS 连接
+        $httpsTest = Test-NetConnection github.com -Port 443 -InformationLevel Quiet -WarningAction SilentlyContinue
+        if ($httpsTest) {
+            Write-Success "✅ GitHub HTTPS connection is working"
+            return $true
+        }
+        else {
+            Write-Warning "⚠️ GitHub HTTPS connection failed"
+            return $false
+        }
+    }
+    catch {
+        Write-Warning "⚠️ Network connectivity test failed: $($_.Exception.Message)"
+        return $false
+    }
 }
 
 # Utility function to write formatted JSON without BOM
@@ -161,204 +242,189 @@ function Initialize-Configuration {
         exit 1
     }
 
-    # Validate we're in a git repository
-    if (-not (Test-Path ".git")) {
-        Write-Error "Current directory is not a Git repository"
-        exit 1
+    # Check for required files
+    $requiredFiles = @("version.json", "wails.json")
+    foreach ($file in $requiredFiles) {
+        if (-not (Test-Path $file)) {
+            Write-Error "Required file not found: $file"
+            exit 1
+        }
     }
 
-    # Auto-repair JSON files if needed
+    # Validate and repair JSON files if needed
     Repair-JsonFiles
 
-    # Check for required tools
-    Test-Prerequisites
-
-    # Load or create version configuration
-    return Get-VersionConfiguration
-}
-
-function Test-Prerequisites {
-    Write-Info "Checking required tools..."
-
-    $tools = @(
-        @{Name = "git"; Command = "git --version"},
-        @{Name = "go"; Command = "go version"},
-        @{Name = "wails"; Command = "wails version"},
-        @{Name = "yarn"; Command = "yarn --version"}
-    )
-
-    $missing = @()
-    foreach ($tool in $tools) {
-        try {
-            $null = Invoke-Expression $tool.Command 2>$null
-            Write-Host "  ✓ $($tool.Name)" -ForegroundColor Green
-        }
-        catch {
-            Write-Host "  ✗ $($tool.Name)" -ForegroundColor Red
-            $missing += $tool.Name
-        }
-    }
-
-    if ($missing.Count -gt 0) {
-        Write-Error "Missing required tools: $($missing -join ', ')"
-        Write-Info "Please install missing tools and ensure they are in your PATH"
-        exit 1
-    }
-
-    Write-Success "All required tools are installed"
-}
-
-function Get-VersionConfiguration {
-    $versionFile = "version.json"
-
-    if (-not (Test-Path $versionFile)) {
-        Write-Info "Creating default version.json configuration..."
-        $defaultConfig = @{
-            version = "1.2.1"
-            github = @{
-                owner = "wangyaxings"
-                repo = "url-navigator"
-            }
-            app = @{
-                name = "URLNavigator"
-                display_name = "URL Navigator"
-                description = "A beautiful URL bookmark manager with auto-update functionality"
-            }
-            build = @{
-                platform = "windows/amd64"
-                flags = @("-tags", "production", "-trimpath", "-clean")
-                ldflags = @("-H=windowsgui", "-s", "-w")
-            }
-            release = @{
-                create_github_release = $true
-                auto_open_browser = $true
-                commit_message_template = "chore: bump version to {version}"
-                tag_message_template = @"
-Release {version}
-
-🚀 Windows Release {version}
-
-Features:
-- Bookmark management with categories
-- Auto-update functionality
-- Modern UI with shadcn/ui
-- Local data storage
-- Improved performance and stability
-
-Platform: Windows x64
-Build: Automated release with version injection
-"@
-            }
-        }
-
-        # Create formatted version.json without BOM
-        $jsonContent = $defaultConfig | ConvertTo-Json -Depth 10
-        Write-JsonWithoutBOM -Content $jsonContent -FilePath $versionFile
-        Write-Success "Created $versionFile with default configuration"
-    }
-
+    # Load configuration from version.json (serves as template)
     try {
-        $config = Get-Content $versionFile -Raw | ConvertFrom-Json
-        Write-Success "Loaded configuration from $versionFile"
+        $configContent = Get-Content "version.json" -Raw -Encoding UTF8
+        $config = $configContent | ConvertFrom-Json
+        Write-Success "Configuration loaded from version.json"
         return $config
     }
     catch {
-        Write-Error "Failed to parse $versionFile`: $($_.Exception.Message)"
+        Write-Error "Failed to load configuration from version.json: $($_.Exception.Message)"
         exit 1
     }
 }
 
-function Test-VersionFormat($Version) {
-    Write-Info "Validating version format..."
+function Test-Prerequisites {
+    Write-Info "Checking prerequisites..."
 
+    # Check Git
+    try {
+        $null = git --version 2>$null
+        Write-Success "✅ Git is available"
+    }
+    catch {
+        Write-Error "❌ Git is not installed or not in PATH"
+        return $false
+    }
+
+    # Check Go
+    try {
+        $null = go version 2>$null
+        Write-Success "✅ Go is available"
+    }
+    catch {
+        Write-Error "❌ Go is not installed or not in PATH"
+        return $false
+    }
+
+    # Check Wails
+    try {
+        $null = wails version 2>$null
+        Write-Success "✅ Wails is available"
+    }
+    catch {
+        Write-Error "❌ Wails is not installed. Install with: go install github.com/wailsapp/wails/v2/cmd/wails@latest"
+        return $false
+    }
+
+    # Check Node.js and Yarn
+    try {
+        $null = node --version 2>$null
+        Write-Success "✅ Node.js is available"
+    }
+    catch {
+        Write-Error "❌ Node.js is not installed or not in PATH"
+        return $false
+    }
+
+    try {
+        $null = yarn --version 2>$null
+        Write-Success "✅ Yarn is available"
+    }
+    catch {
+        Write-Error "❌ Yarn is not installed or not in PATH"
+        return $false
+    }
+
+    return $true
+}
+
+function Test-VersionFormat($Version) {
+    # Support both vX.Y.Z and X.Y.Z formats
     if ($Version -match '^v?\d+\.\d+\.\d+$') {
-        Write-Success "Version format validation passed"
         return $true
     }
     else {
-        Write-Error "Invalid version format: '$Version'"
-        Write-Error "Expected format: vX.Y.Z or X.Y.Z (e.g., v1.3.0 or 1.3.0)"
+        Write-Error "Invalid version format: $Version (expected: vX.Y.Z or X.Y.Z)"
         return $false
     }
 }
 
 function Get-NormalizedVersion($Version) {
-    if ($Version.StartsWith('v')) {
-        $versionWithV = $Version
-        $versionWithoutV = $Version.Substring(1)
-    }
-    else {
-        $versionWithV = "v$Version"
-        $versionWithoutV = $Version
-    }
-
+    # Ensure version starts with 'v' and create both formats
+    $versionWithoutV = $Version -replace '^v', ''
     return @{
-        WithV = $versionWithV
+        WithV = "v$versionWithoutV"
         WithoutV = $versionWithoutV
     }
 }
 
 function Test-GitRepository {
-    Write-Info "Checking Git repository status..."
+    Write-Info "Checking git repository status..."
 
-    # Check if working directory is clean
-    $status = git status --porcelain 2>$null
-    if ($status) {
-        Write-Error "Working directory has uncommitted changes:"
-        git status --short
-        Write-Info "Please commit or stash changes before releasing"
+    # Check if we're in a git repository
+    try {
+        $null = git rev-parse --git-dir 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Not in a git repository"
+            return $false
+        }
+    }
+    catch {
+        Write-Error "Git repository check failed"
         return $false
     }
 
-    Write-Success "Git repository status is clean"
+    # Check for uncommitted changes
+    $status = git status --porcelain 2>$null
+    if ($status) {
+        Write-Error "Working directory is not clean. Please commit or stash your changes:"
+        git status --short
+        return $false
+    }
+
+    Write-Success "✅ Git repository is clean"
     return $true
 }
 
-function Get-CurrentVersion() {
-    Write-Info "Getting current version information..."
+function Get-CurrentVersion {
+    Write-Info "Detecting current version..."
 
-    # Read from wails.json as primary source
+    # Try to get version from wails.json first
     if (Test-Path "wails.json") {
         try {
             $wailsConfig = Get-Content "wails.json" -Raw | ConvertFrom-Json
-            $currentVersion = $wailsConfig.info.version
-            if ($currentVersion) {
-                Write-Info "Current version from wails.json: v$currentVersion"
-                return $currentVersion
+            if ($wailsConfig.info.productVersion) {
+                Write-Success "Current version detected from wails.json: v$($wailsConfig.info.productVersion)"
+                return $wailsConfig.info.productVersion
             }
         }
         catch {
-            Write-Warning "Failed to read version from wails.json: $($_.Exception.Message)"
+            Write-Warning "Failed to read version from wails.json"
         }
     }
 
-    # Fallback to frontend/package.json
+    # Try to get version from frontend/package.json
     if (Test-Path "frontend/package.json") {
         try {
             $packageConfig = Get-Content "frontend/package.json" -Raw | ConvertFrom-Json
-            $currentVersion = $packageConfig.version
-            if ($currentVersion) {
-                Write-Info "Current version from frontend/package.json: v$currentVersion"
-                return $currentVersion
+            if ($packageConfig.version) {
+                Write-Success "Current version detected from frontend/package.json: v$($packageConfig.version)"
+                return $packageConfig.version
             }
         }
         catch {
-            Write-Warning "Failed to read version from frontend/package.json: $($_.Exception.Message)"
+            Write-Warning "Failed to read version from frontend/package.json"
         }
     }
 
-    # Final fallback - assume this is initial setup
-    Write-Warning "No existing version found, assuming initial setup with version 1.0.0"
-    return "1.0.0"
+    # Fallback to version.json (though this is meant to be a template)
+    try {
+        $versionConfig = Get-Content "version.json" -Raw | ConvertFrom-Json
+        if ($versionConfig.version) {
+            Write-Warning "Using version from version.json template: v$($versionConfig.version)"
+            return $versionConfig.version
+        }
+    }
+    catch {
+        Write-Error "Failed to detect current version from any source"
+        exit 1
+    }
+
+    Write-Error "Could not determine current version"
+    exit 1
 }
 
 function Get-GitHubInfo($Config) {
-    Write-Info "Getting GitHub repository information..."
+    Write-Info "Detecting GitHub repository information..."
 
     # Try to auto-detect from git remote
     try {
         $remoteUrl = git config --get remote.origin.url 2>$null
-        if ($remoteUrl -and $remoteUrl -match 'github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?/?$') {
+        if ($remoteUrl -and $remoteUrl -match 'github\.com[:/]([^/]+)/([^/\.]+)(\.git)?/?$') {
             $owner = $Matches[1]
             $repo = $Matches[2]
             Write-Success "Auto-detected GitHub repository: $owner/$repo"
@@ -398,56 +464,37 @@ function Confirm-Operation($CurrentVersion, $NewVersion, $SkipBuild, $SkipReleas
 
     Write-Host ""
     $confirmation = Read-Host "Confirm to continue? (y/N)"
-
-    return $confirmation.ToLower() -eq 'y'
+    return $confirmation -eq 'y' -or $confirmation -eq 'Y'
 }
 
-# Build and release functions
 function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
-    Write-Info "Updating version numbers (excluding version.json configuration)..."
-
-    # Backup original files
-    if (Test-Path "wails.json") {
-        Copy-Item "wails.json" "wails.json.backup" -Force
-    }
-    if (Test-Path "frontend/package.json") {
-        Copy-Item "frontend/package.json" "frontend/package.json.backup" -Force
-    }
-
-    # Note: version.json is NOT updated - it serves as configuration template
-    Write-Info "version.json remains unchanged (serves as configuration template)"
+    Write-Info "Updating version files..."
+    Write-Info "Note: version.json will be preserved as configuration template"
 
     # Update wails.json
     if (Test-Path "wails.json") {
         try {
             $wailsConfig = Get-Content "wails.json" -Raw | ConvertFrom-Json
-            $wailsConfig.info.version = $NewVersion.WithoutV
+            $wailsConfig.info.productVersion = $NewVersion.WithoutV
 
-            # Ensure github section exists and update repository info
-            if (-not $wailsConfig.github) {
-                $wailsConfig | Add-Member -NotePropertyName "github" -NotePropertyValue @{}
-            }
-            $wailsConfig.github.owner = $GitHubInfo.Owner
-            $wailsConfig.github.repo = $GitHubInfo.Repo
-
-            # Write formatted JSON without BOM to avoid encoding issues
+            # Write JSON without BOM to avoid encoding issues
             $jsonContent = $wailsConfig | ConvertTo-Json -Depth 10
             Write-JsonWithoutBOM -Content $jsonContent -FilePath "wails.json"
             Write-Success "Updated wails.json to version $($NewVersion.WithoutV)"
         }
         catch {
             Write-Error "Failed to update wails.json: $($_.Exception.Message)"
-            throw
+            throw "wails.json update failed"
         }
     }
 
-    # Update frontend/package.json
+    # Update frontend/package.json if it exists
     if (Test-Path "frontend/package.json") {
         try {
             $packageConfig = Get-Content "frontend/package.json" -Raw | ConvertFrom-Json
             $packageConfig.version = $NewVersion.WithoutV
 
-            # Write formatted JSON without BOM to avoid encoding issues
+            # Write JSON without BOM to avoid encoding issues
             $jsonContent = $packageConfig | ConvertTo-Json -Depth 10
             Write-JsonWithoutBOM -Content $jsonContent -FilePath "frontend/package.json"
             Write-Success "Updated frontend/package.json to version $($NewVersion.WithoutV)"
@@ -508,7 +555,7 @@ function Build-Application($NewVersion, $GitHubInfo, $Config) {
         "-ldflags", $ldflagsString
     ) + $Config.build.flags
 
-            Write-Info "Build command: wails build -platform $($Config.build.platform) -ldflags `"$ldflagsString`" $($Config.build.flags -join ' ')"
+    Write-Info "Build command: wails build -platform $($Config.build.platform) -ldflags `"$ldflagsString`" $($Config.build.flags -join ' ')"
 
     # Execute Wails build - use simpler approach to avoid PowerShell stderr issues
     Write-Info "Executing Wails build..."
@@ -549,6 +596,7 @@ function Build-Application($NewVersion, $GitHubInfo, $Config) {
     Write-Info "Build size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB ($($fileInfo.Length) bytes)"
 }
 
+# 修改后的 Invoke-GitOperations 函数（带重试机制）
 function Invoke-GitOperations($NewVersion, $Config) {
     Write-Info "Committing version update..."
 
@@ -588,8 +636,11 @@ function Invoke-GitOperations($NewVersion, $Config) {
 
     Write-Success "Tag created successfully"
 
-    # Push to remote repository
-    Write-Info "Pushing to remote repository..."
+    # Test GitHub connectivity before pushing
+    $connectivityOk = Test-GitHubConnectivity
+    if (-not $connectivityOk) {
+        Write-Warning "⚠️ GitHub connectivity issues detected, but continuing with retry mechanism..."
+    }
 
     # Get current branch
     $currentBranch = git branch --show-current 2>$null
@@ -598,37 +649,50 @@ function Invoke-GitOperations($NewVersion, $Config) {
         Write-Warning "Cannot detect current branch, defaulting to 'main'"
     }
 
-    Write-Info "Pushing to branch: $currentBranch"
-    $result = git push origin $currentBranch 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Failed to push code: $result"
-        throw "Code push failed"
+    # Push to remote repository with retry mechanism
+    try {
+        # 推送代码到分支（带重试）
+        Invoke-GitPushWithRetry -Command "git push origin $currentBranch" -Description "Pushing code to $currentBranch branch" -MaxRetries $GitRetryConfig.CodePushRetries -DelaySeconds $GitRetryConfig.CodePushDelay
+
+        Write-Success "Code pushed to $currentBranch branch"
+
+        # 推送标签（带重试，增加延迟因为标签推送通常需要更多时间）
+        Write-Info "🏷️ Pushing tag $($NewVersion.WithV) to trigger GitHub Actions..."
+        Invoke-GitPushWithRetry -Command "git push origin $($NewVersion.WithV)" -Description "Pushing tag $($NewVersion.WithV)" -MaxRetries $GitRetryConfig.TagPushRetries -DelaySeconds $GitRetryConfig.TagPushDelay
+
+        Write-Success "✅ Tag $($NewVersion.WithV) pushed successfully!"
+        Write-Success "🚀 GitHub Actions should now be triggered for release creation"
+
+        # Verify tag exists on remote with retry
+        Write-Info "🔍 Verifying tag on remote repository..."
+        $verificationSuccess = $false
+
+        for ($i = 1; $i -le 3; $i++) {
+            Start-Sleep -Seconds 2
+            $remoteTag = git ls-remote --tags origin $NewVersion.WithV 2>$null
+            if ($remoteTag) {
+                Write-Success "✅ Tag verified on remote: $($NewVersion.WithV)"
+                $verificationSuccess = $true
+                break
+            }
+            else {
+                Write-Info "⏱️ Verification attempt $i/3: Tag not yet visible on remote..."
+            }
+        }
+
+        if (-not $verificationSuccess) {
+            Write-Warning "⚠️ Tag verification failed, but push seemed successful. GitHub Actions may still trigger."
+        }
     }
-
-    Write-Success "Code pushed to $currentBranch branch"
-
-    # Push tag to trigger GitHub release
-    Write-Info "Pushing tag $($NewVersion.WithV) to trigger GitHub Actions..."
-    Write-Info "Command: git push origin $($NewVersion.WithV)"
-
-    $result = git push origin $NewVersion.WithV 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Failed to push tag to remote repository:"
-        Write-Error "$result"
-        Write-Error "This will prevent GitHub Actions from being triggered"
-        throw "Tag push failed"
-    }
-
-    Write-Success "✅ Tag $($NewVersion.WithV) pushed successfully!"
-    Write-Success "🚀 GitHub Actions should now be triggered for release creation"
-
-    # Verify tag exists on remote
-    Write-Info "🔍 Verifying tag on remote repository..."
-    $remoteTag = git ls-remote --tags origin $NewVersion.WithV 2>$null
-    if ($remoteTag) {
-        Write-Success "✅ Tag verified on remote: $($NewVersion.WithV)"
-    } else {
-        Write-Warning "⚠️  Tag not found on remote, GitHub Actions may not trigger"
+    catch {
+        Write-Error "❌ Git operations failed: $($_.Exception.Message)"
+        Write-Info ""
+        Write-Info "💡 Manual recovery options:"
+        Write-Info "   1. Run: git push origin $currentBranch"
+        Write-Info "   2. Run: git push origin $($NewVersion.WithV)"
+        Write-Info "   3. Check GitHub repository for partial updates"
+        Write-Info ""
+        throw "Git push operations failed"
     }
 }
 
@@ -665,6 +729,12 @@ function Main {
     try {
         # Initialize and validate environment
         $config = Initialize-Configuration
+
+        # Check prerequisites
+        if (-not (Test-Prerequisites)) {
+            Write-Error "Prerequisites check failed"
+            exit 1
+        }
 
         # Validate version format
         if (-not (Test-VersionFormat $Version)) {
