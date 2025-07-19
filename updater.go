@@ -22,7 +22,7 @@ type UpdateInfo struct {
 }
 
 const (
-	CurrentVersion = "1.0.0"
+	CurrentVersion = "1.1.6"
 	// GitHub仓库信息 - 请在创建仓库后替换这些值
 	GitHubOwner = "wangyaxings"  // 替换为您的GitHub用户名
 	GitHubRepo  = "url-navigator"         // 替换为您的仓库名

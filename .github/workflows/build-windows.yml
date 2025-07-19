@@ -1,38 +1,96 @@
-name: Build for Windows
+name: Build Windows Application
 
 on:
   push:
+    branches: [ "master" ]
+  pull_request:
     branches: [ "master" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: frontend/yarn.lock
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
+      - name: Add Go bin to PATH
+        run: echo "${{ github.workspace }}/go/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: powershell
+
+      - name: Verify Wails installation
+        run: wails version
+
       - name: Install frontend dependencies
-        run: yarn install
+        run: yarn install --frozen-lockfile
         working-directory: ./frontend
 
-      - name: Build application
-        run: wails build -platform windows/amd64 -ldflags "-w -s"
+      - name: Build frontend
+        run: yarn build
+        working-directory: ./frontend
 
-      - name: Upload artifact
+      - name: Download Go dependencies
+        run: go mod download
+
+      - name: Verify Go modules
+        run: go mod verify
+
+      - name: Build application with detailed flags
+        run: |
+          wails build -platform windows/amd64 -ldflags "-H=windowsgui -s -w" -tags production -trimpath -o URLNavigator.exe
+        env:
+          CGO_ENABLED: 1
+
+      - name: Verify build output
+        run: |
+          if (Test-Path "./build/bin/URLNavigator.exe") {
+            $fileInfo = Get-Item "./build/bin/URLNavigator.exe"
+            Write-Host "Build successful! File size: $($fileInfo.Length) bytes"
+            Write-Host "File path: $($fileInfo.FullName)"
+          } else {
+            Write-Error "Build failed - URLNavigator.exe not found"
+            exit 1
+          }
+        shell: powershell
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AutoUpdate-windows-amd64
-          path: build/bin/
+          name: URLNavigator-windows-amd64
+          path: |
+            build/bin/URLNavigator.exe
+          retention-days: 7
+
+      - name: Create release package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+          $archiveName = "URLNavigator-windows-amd64-$timestamp.zip"
+          Compress-Archive -Path "./build/bin/URLNavigator.exe" -DestinationPath $archiveName
+          Write-Host "Created release package: $archiveName"
+        shell: powershell
+
+      - name: Upload release package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: URLNavigator-release-package
+          path: "*.zip"
+          retention-days: 30
