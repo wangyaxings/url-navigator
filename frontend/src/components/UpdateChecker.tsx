@@ -54,49 +54,11 @@ const UpdateChecker: React.FC = () => {
     checkForUpdates();
   }, []);
 
-  // 测试更新功能
-  const testUpdateWithNewVersion = async () => {
-    try {
-      setIsCheckingUpdate(true);
-      const [updateData, version] = await Promise.all([
-        AppService.TestUpdateWithNewVersion(),
-        AppService.GetCurrentVersion()
-      ]);
-      setUpdateInfo(updateData);
-      setCurrentVersion(version);
 
-      if (updateData.hasUpdate) {
-        setShowUpdateDialog(true);
-      }
-    } catch (error) {
-      console.error('Failed to test update:', error);
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  };
-
-  const testUpdateNoNewVersion = async () => {
-    try {
-      setIsCheckingUpdate(true);
-      const [updateData, version] = await Promise.all([
-        AppService.TestUpdateNoNewVersion(),
-        AppService.GetCurrentVersion()
-      ]);
-      setUpdateInfo(updateData);
-      setCurrentVersion(version);
-
-      // 显示已是最新版本的提示
-      alert('当前已是最新版本！');
-    } catch (error) {
-      console.error('Failed to test update:', error);
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  };
 
   return (
     <>
-      <div className="flex space-x-2">
+      <div className="flex justify-center">
         <Button
           variant="outline"
           onClick={checkForUpdates}
@@ -113,24 +75,6 @@ const UpdateChecker: React.FC = () => {
               检查更新
             </>
           )}
-        </Button>
-
-        {/* 测试按钮 - 生产环境中应移除 */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={testUpdateWithNewVersion}
-          disabled={isCheckingUpdate}
-        >
-          测试有更新
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={testUpdateNoNewVersion}
-          disabled={isCheckingUpdate}
-        >
-          测试无更新
         </Button>
       </div>
 
@@ -164,8 +108,8 @@ const UpdateChecker: React.FC = () => {
             {updateInfo?.releaseNotes && (
               <div>
                 <h4 className="text-sm font-medium mb-2">更新内容:</h4>
-                <div className="bg-gray-50 p-3 rounded text-sm text-gray-700">
-                  {updateInfo.releaseNotes}
+                <div className="bg-gray-50 p-3 rounded text-sm text-gray-700 max-h-32 overflow-y-auto">
+                  <pre className="whitespace-pre-wrap">{updateInfo.releaseNotes}</pre>
                 </div>
               </div>
             )}

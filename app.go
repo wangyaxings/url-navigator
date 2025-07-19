@@ -233,26 +233,3 @@ func containsIgnoreCase(str, substr string) bool {
 		       containsIgnoreCase(str[1:], substr)))))
 }
 
-// TestUpdateWithNewVersion 测试有新版本的情况
-func (a *App) TestUpdateWithNewVersion() (*UpdateInfo, error) {
-	info := &UpdateInfo{
-		HasUpdate:      true,
-		CurrentVersion: "1.0.0",
-		LatestVersion:  "1.1.0",
-		UpdateURL:      "https://github.com/your-username/urlnavigator/releases/download/v1.1.0/",
-		ReleaseNotes:   "新版本功能:\n- 修复分类创建问题\n- 优化界面性能\n- 添加快捷键支持",
-	}
-	return info, nil
-}
-
-// TestUpdateNoNewVersion 测试没有新版本的情况
-func (a *App) TestUpdateNoNewVersion() (*UpdateInfo, error) {
-	info := &UpdateInfo{
-		HasUpdate:      false,
-		CurrentVersion: "1.0.0",
-		LatestVersion:  "1.0.0",
-		UpdateURL:      "",
-		ReleaseNotes:   "",
-	}
-	return info, nil
-}
