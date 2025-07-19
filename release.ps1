@@ -89,7 +89,7 @@ function Invoke-GitPushWithRetry {
 
     for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
         try {
-            Write-Info "Attempt $attempt/$MaxRetries: $Command"
+            Write-Info "Attempt $attempt/${MaxRetries}: $Command"
 
             # 执行 Git 命令
             $result = Invoke-Expression "$Command 2>&1"
@@ -102,7 +102,7 @@ function Invoke-GitPushWithRetry {
                 $errorMsg = "Exit code: $LASTEXITCODE, Output: $result"
 
                 if ($attempt -eq $MaxRetries) {
-                    Write-Error "❌ $Description failed after $MaxRetries attempts"
+                    Write-Error "❌ $Description failed after ${MaxRetries} attempts"
                     Write-Error $errorMsg
                     throw "$Description failed: $errorMsg"
                 }
@@ -115,7 +115,7 @@ function Invoke-GitPushWithRetry {
         }
         catch {
             if ($attempt -eq $MaxRetries) {
-                Write-Error "❌ $Description failed after $MaxRetries attempts"
+                Write-Error "❌ $Description failed after ${MaxRetries} attempts"
                 throw $_.Exception
             }
             else {
