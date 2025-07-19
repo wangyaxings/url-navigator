@@ -32,11 +32,23 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
       - name: Add Go bin to PATH
-        run: echo "${{ github.workspace }}/go/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        run: |
+          $goPath = go env GOPATH
+          $goBin = Join-Path $goPath "bin"
+          echo $goBin >> $env:GITHUB_PATH
         shell: powershell
 
       - name: Verify Wails installation
         run: wails version
+
+      - name: Download Go dependencies
+        run: go mod download
+
+      - name: Verify Go modules
+        run: go mod verify
+
+      - name: Generate Wails bindings
+        run: wails generate
 
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
@@ -45,12 +57,6 @@ jobs:
       - name: Build frontend
         run: yarn build
         working-directory: ./frontend
-
-      - name: Download Go dependencies
-        run: go mod download
-
-      - name: Verify Go modules
-        run: go mod verify
 
       - name: Build application with detailed flags
         run: |
