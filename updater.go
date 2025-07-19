@@ -22,7 +22,7 @@ type UpdateInfo struct {
 }
 
 const (
-	CurrentVersion = "1.1.6"
+	CurrentVersion = "1.2.0"
 	// GitHub仓库信息 - 请替换为您的实际仓库信息
 	GitHubOwner = "YOUR_GITHUB_USERNAME"  // 替换为您的GitHub用户名
 	GitHubRepo  = "url-navigator"         // 替换为您的仓库名
@@ -31,6 +31,17 @@ const (
 // CheckForUpdates checks if there's a new version available using GitHub API
 func (a *App) CheckForUpdates() UpdateInfo {
 	currentVersion := CurrentVersion
+
+	// 仅在Windows上支持自动更新
+	if runtime.GOOS != "windows" {
+		return UpdateInfo{
+			HasUpdate:      false,
+			CurrentVersion: currentVersion,
+			LatestVersion:  currentVersion,
+			UpdateURL:      "",
+			ReleaseNotes:   "自动更新功能仅支持Windows版本",
+		}
+	}
 
 	// 构建GitHub API URL
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", GitHubOwner, GitHubRepo)
@@ -106,33 +117,20 @@ func (a *App) CheckForUpdates() UpdateInfo {
 
 	var updateURL string
 	if hasUpdate {
-		// 查找适合当前平台的下载链接
-		expectedBinaryName := getBinaryName()
-
-		// 首先尝试精确匹配
+		// 查找Windows可执行文件
 		for _, asset := range release.Assets {
-			if asset.Name == expectedBinaryName {
+			// 查找 URLNavigator.exe 文件
+			if asset.Name == "URLNavigator.exe" {
 				updateURL = asset.BrowserDownloadURL
 				break
 			}
 		}
 
-		// 如果没找到精确匹配，尝试模糊匹配
+		// 如果没找到确切的文件名，尝试查找包含.exe的文件
 		if updateURL == "" {
-			platformString := getPlatformString()
 			for _, asset := range release.Assets {
-				if strings.Contains(strings.ToLower(asset.Name), platformString) {
-					updateURL = asset.BrowserDownloadURL
-					break
-				}
-			}
-		}
-
-		// 最后尝试按操作系统匹配
-		if updateURL == "" {
-			osString := runtime.GOOS
-			for _, asset := range release.Assets {
-				if strings.Contains(strings.ToLower(asset.Name), osString) {
+				if strings.HasSuffix(strings.ToLower(asset.Name), ".exe") &&
+				   strings.Contains(strings.ToLower(asset.Name), "urlnavigator") {
 					updateURL = asset.BrowserDownloadURL
 					break
 				}
@@ -153,6 +151,11 @@ func (a *App) CheckForUpdates() UpdateInfo {
 func (a *App) DownloadAndApplyUpdate(updateURL string) error {
 	if updateURL == "" {
 		return fmt.Errorf("无效的更新URL")
+	}
+
+	// 仅在Windows上支持自动更新
+	if runtime.GOOS != "windows" {
+		return fmt.Errorf("自动更新功能仅支持Windows版本")
 	}
 
 	// 创建HTTP客户端
@@ -237,34 +240,6 @@ func compareVersions(v1, v2 string) int {
 	}
 
 	return 0
-}
-
-// getBinaryName returns the expected binary name for the current platform
-func getBinaryName() string {
-	switch runtime.GOOS {
-	case "windows":
-		return "URLNavigator-windows-amd64.exe"
-	case "darwin":
-		return "URLNavigator-darwin-amd64.tar.gz"
-	case "linux":
-		return "URLNavigator-linux-amd64"
-	default:
-		return "URLNavigator"
-	}
-}
-
-// getPlatformString returns a platform string for matching
-func getPlatformString() string {
-	switch runtime.GOOS {
-	case "windows":
-		return "windows-amd64"
-	case "darwin":
-		return "darwin-amd64"
-	case "linux":
-		return "linux-amd64"
-	default:
-		return runtime.GOOS + "-" + runtime.GOARCH
-	}
 }
 
 // TestUpdateAvailable simulates an update being available (for testing)
