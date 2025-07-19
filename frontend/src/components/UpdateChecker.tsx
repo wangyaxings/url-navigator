@@ -13,7 +13,7 @@ const UpdateChecker: React.FC = () => {
   const [showProgressDialog, setShowProgressDialog] = useState(false);
   const [currentVersion, setCurrentVersion] = useState<string>('');
   const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const progressIntervalRef = useRef<number | null>(null);
 
     // 检查更新
   const checkForUpdates = async () => {
@@ -149,7 +149,6 @@ const UpdateChecker: React.FC = () => {
           </DialogHeader>
 
           <div className="space-y-4">
-          <div className="space-y-4">
             <div className="bg-gray-50 p-4 rounded-lg">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-medium">当前版本:</span>
@@ -177,7 +176,7 @@ const UpdateChecker: React.FC = () => {
             </div>
           </div>
 
-          <DialogFooter>          <DialogFooter>
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setShowUpdateDialog(false)}
