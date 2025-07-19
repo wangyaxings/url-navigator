@@ -68,19 +68,30 @@ function Write-Header($Message) {
     Write-Host ""
 }
 
-# Utility function to write JSON without BOM
+# Utility function to write formatted JSON without BOM
 function Write-JsonWithoutBOM($Content, $FilePath) {
-    # Use UTF8 encoding without BOM for better compatibility with tools
-    if ($PSVersionTable.PSVersion.Major -ge 6) {
-        # PowerShell Core/7+ supports UTF8NoBOM
-        $Content | Set-Content $FilePath -Encoding UTF8NoBOM
-    } else {
-        # Windows PowerShell 5.1 - use .NET method to write without BOM
-        $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-        [System.IO.File]::WriteAllText($FilePath, $Content, $utf8NoBom)
-    }
+    # Format JSON with proper indentation for better readability
+    try {
+        # Parse and re-format JSON to ensure consistent formatting
+        $jsonObject = $Content | ConvertFrom-Json
+        $formattedJson = $jsonObject | ConvertTo-Json -Depth 10 -Compress:$false
 
-    Write-Info "Written JSON file without BOM: $FilePath"
+        # Use UTF8 encoding without BOM for better compatibility with tools
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            # PowerShell Core/7+ supports UTF8NoBOM
+            $formattedJson | Set-Content $FilePath -Encoding UTF8NoBOM
+        } else {
+            # Windows PowerShell 5.1 - use .NET method to write without BOM
+            $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+            [System.IO.File]::WriteAllText($FilePath, $formattedJson, $utf8NoBom)
+        }
+
+        Write-Info "Written formatted JSON file without BOM: $FilePath"
+    }
+    catch {
+        Write-Error "Failed to format JSON for $FilePath`: $($_.Exception.Message)"
+        throw "JSON formatting failed"
+    }
 }
 
 # Configuration and validation functions
@@ -180,7 +191,7 @@ Build: Automated release with version injection
             }
         }
 
-        # Create version.json without BOM
+        # Create formatted version.json without BOM
         $jsonContent = $defaultConfig | ConvertTo-Json -Depth 10
         Write-JsonWithoutBOM -Content $jsonContent -FilePath $versionFile
         Write-Success "Created $versionFile with default configuration"
@@ -359,7 +370,7 @@ function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
             $wailsConfig.github.owner = $GitHubInfo.Owner
             $wailsConfig.github.repo = $GitHubInfo.Repo
 
-            # Write JSON without BOM to avoid encoding issues
+            # Write formatted JSON without BOM to avoid encoding issues
             $jsonContent = $wailsConfig | ConvertTo-Json -Depth 10
             Write-JsonWithoutBOM -Content $jsonContent -FilePath "wails.json"
             Write-Success "Updated wails.json to version $($NewVersion.WithoutV)"
@@ -376,7 +387,7 @@ function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
             $packageConfig = Get-Content "frontend/package.json" -Raw | ConvertFrom-Json
             $packageConfig.version = $NewVersion.WithoutV
 
-            # Write JSON without BOM to avoid encoding issues
+            # Write formatted JSON without BOM to avoid encoding issues
             $jsonContent = $packageConfig | ConvertTo-Json -Depth 10
             Write-JsonWithoutBOM -Content $jsonContent -FilePath "frontend/package.json"
             Write-Success "Updated frontend/package.json to version $($NewVersion.WithoutV)"
@@ -536,15 +547,20 @@ function Invoke-GitOperations($NewVersion, $Config) {
 
     Write-Success "Code pushed to $currentBranch branch"
 
-    # Push tag
-    Write-Info "Pushing tag..."
+    # Push tag to trigger GitHub release
+    Write-Info "Pushing tag $($NewVersion.WithV) to trigger GitHub Actions..."
+    Write-Info "Command: git push origin $($NewVersion.WithV)"
+
     $result = git push origin $NewVersion.WithV 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Failed to push tag: $result"
+        Write-Error "Failed to push tag to remote repository:"
+        Write-Error "$result"
+        Write-Error "This will prevent GitHub Actions from being triggered"
         throw "Tag push failed"
     }
 
-    Write-Success "Tag pushed successfully"
+    Write-Success "✅ Tag $($NewVersion.WithV) pushed successfully!"
+    Write-Success "🚀 GitHub Actions should now be triggered for release creation"
 }
 
 function Show-CompletionMessage($NewVersion, $GitHubInfo, $Config) {
