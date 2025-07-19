@@ -86,11 +86,68 @@ function Write-JsonWithoutBOM($Content, $FilePath) {
             [System.IO.File]::WriteAllText($FilePath, $formattedJson, $utf8NoBom)
         }
 
-        Write-Info "Written formatted JSON file without BOM: $FilePath"
+        # Verify the file was written correctly
+        Confirm-JsonFileIntegrity -FilePath $FilePath
+        Write-Info "✅ Written formatted JSON file without BOM: $FilePath"
     }
     catch {
         Write-Error "Failed to format JSON for $FilePath`: $($_.Exception.Message)"
         throw "JSON formatting failed"
+    }
+}
+
+# Function to check and fix JSON file encoding issues
+function Confirm-JsonFileIntegrity($FilePath) {
+    try {
+        # Check for BOM
+        $bytes = [System.IO.File]::ReadAllBytes($FilePath)
+        if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            Write-Warning "⚠️  BOM detected in $FilePath, this should not happen!"
+            return $false
+        }
+
+        # Validate JSON syntax
+        $content = Get-Content $FilePath -Raw
+        $null = $content | ConvertFrom-Json
+        Write-Info "✅ JSON integrity confirmed: $FilePath"
+        return $true
+    }
+    catch {
+        Write-Error "❌ JSON integrity check failed for $FilePath`: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+# Function to auto-fix existing JSON files with BOM issues
+function Repair-JsonFiles() {
+    Write-Info "🔧 Checking and repairing JSON files..."
+
+    $jsonFiles = @("wails.json", "version.json", "frontend/package.json")
+    $repairedFiles = @()
+
+    foreach ($file in $jsonFiles) {
+        if (Test-Path $file) {
+            $bytes = [System.IO.File]::ReadAllBytes($file)
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+                Write-Warning "🛠️  Repairing BOM in $file..."
+                try {
+                    $content = Get-Content $file -Raw | ConvertFrom-Json | ConvertTo-Json -Depth 10 -Compress:$false
+                    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+                    [System.IO.File]::WriteAllText($file, $content, $utf8NoBom)
+                    $repairedFiles += $file
+                    Write-Success "✅ Repaired $file"
+                }
+                catch {
+                    Write-Error "❌ Failed to repair $file`: $($_.Exception.Message)"
+                }
+            }
+        }
+    }
+
+    if ($repairedFiles.Count -gt 0) {
+        Write-Success "🔧 Repaired $($repairedFiles.Count) JSON files: $($repairedFiles -join ', ')"
+    } else {
+        Write-Info "✅ All JSON files are already in correct format"
     }
 }
 
@@ -109,6 +166,9 @@ function Initialize-Configuration {
         Write-Error "Current directory is not a Git repository"
         exit 1
     }
+
+    # Auto-repair JSON files if needed
+    Repair-JsonFiles
 
     # Check for required tools
     Test-Prerequisites
@@ -561,6 +621,15 @@ function Invoke-GitOperations($NewVersion, $Config) {
 
     Write-Success "✅ Tag $($NewVersion.WithV) pushed successfully!"
     Write-Success "🚀 GitHub Actions should now be triggered for release creation"
+
+    # Verify tag exists on remote
+    Write-Info "🔍 Verifying tag on remote repository..."
+    $remoteTag = git ls-remote --tags origin $NewVersion.WithV 2>$null
+    if ($remoteTag) {
+        Write-Success "✅ Tag verified on remote: $($NewVersion.WithV)"
+    } else {
+        Write-Warning "⚠️  Tag not found on remote, GitHub Actions may not trigger"
+    }
 }
 
 function Show-CompletionMessage($NewVersion, $GitHubInfo, $Config) {
@@ -635,6 +704,21 @@ function Main {
 
         # Update version files
         Update-VersionFiles $newVersion $gitHubInfo $config
+
+        # Verify all JSON files after update
+        Write-Info "🔍 Verifying JSON files integrity after update..."
+        $integrity = @()
+        $integrity += Confirm-JsonFileIntegrity "wails.json"
+        $integrity += Confirm-JsonFileIntegrity "version.json"
+        if (Test-Path "frontend/package.json") {
+            $integrity += Confirm-JsonFileIntegrity "frontend/package.json"
+        }
+
+        if ($integrity -contains $false) {
+            Write-Error "❌ JSON integrity check failed, aborting release"
+            throw "JSON integrity validation failed"
+        }
+        Write-Success "✅ All JSON files passed integrity check"
 
         # Build application (if not skipped)
         if (-not $SkipBuild) {
