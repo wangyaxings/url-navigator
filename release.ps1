@@ -226,10 +226,10 @@ function Test-GitRepository {
     return $true
 }
 
-function Get-CurrentVersion($Config) {
+function Get-CurrentVersion() {
     Write-Info "Getting current version information..."
 
-    # Try to read from wails.json first
+    # Read from wails.json as primary source
     if (Test-Path "wails.json") {
         try {
             $wailsConfig = Get-Content "wails.json" -Raw | ConvertFrom-Json
@@ -244,10 +244,24 @@ function Get-CurrentVersion($Config) {
         }
     }
 
-    # Fallback to version.json
-    $currentVersion = $Config.version
-    Write-Info "Current version from version.json: v$currentVersion"
-    return $currentVersion
+    # Fallback to frontend/package.json
+    if (Test-Path "frontend/package.json") {
+        try {
+            $packageConfig = Get-Content "frontend/package.json" -Raw | ConvertFrom-Json
+            $currentVersion = $packageConfig.version
+            if ($currentVersion) {
+                Write-Info "Current version from frontend/package.json: v$currentVersion"
+                return $currentVersion
+            }
+        }
+        catch {
+            Write-Warning "Failed to read version from frontend/package.json: $($_.Exception.Message)"
+        }
+    }
+
+    # Final fallback - assume this is initial setup
+    Write-Warning "No existing version found, assuming initial setup with version 1.0.0"
+    return "1.0.0"
 }
 
 function Get-GitHubInfo($Config) {
@@ -302,7 +316,7 @@ function Confirm-Operation($CurrentVersion, $NewVersion, $SkipBuild, $SkipReleas
 
 # Build and release functions
 function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
-    Write-Info "Updating version numbers..."
+    Write-Info "Updating version numbers (excluding version.json configuration)..."
 
     # Backup original files
     if (Test-Path "wails.json") {
@@ -312,11 +326,8 @@ function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
         Copy-Item "frontend/package.json" "frontend/package.json.backup" -Force
     }
 
-    # Update version.json
-    $Config.version = $NewVersion.WithoutV
-    $Config.github.owner = $GitHubInfo.Owner
-    $Config.github.repo = $GitHubInfo.Repo
-    $Config | ConvertTo-Json -Depth 10 | Set-Content "version.json" -Encoding UTF8
+    # Note: version.json is NOT updated - it serves as configuration template
+    Write-Info "version.json remains unchanged (serves as configuration template)"
 
     # Update wails.json
     if (Test-Path "wails.json") {
@@ -324,7 +335,7 @@ function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
             $wailsConfig = Get-Content "wails.json" -Raw | ConvertFrom-Json
             $wailsConfig.info.version = $NewVersion.WithoutV
 
-            # Ensure github section exists
+            # Ensure github section exists and update repository info
             if (-not $wailsConfig.github) {
                 $wailsConfig | Add-Member -NotePropertyName "github" -NotePropertyValue @{}
             }
@@ -332,7 +343,7 @@ function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
             $wailsConfig.github.repo = $GitHubInfo.Repo
 
             $wailsConfig | ConvertTo-Json -Depth 10 | Set-Content "wails.json" -Encoding UTF8
-            Write-Success "Updated wails.json"
+            Write-Success "Updated wails.json to version $($NewVersion.WithoutV)"
         }
         catch {
             Write-Error "Failed to update wails.json: $($_.Exception.Message)"
@@ -346,14 +357,14 @@ function Update-VersionFiles($NewVersion, $GitHubInfo, $Config) {
             $packageConfig = Get-Content "frontend/package.json" -Raw | ConvertFrom-Json
             $packageConfig.version = $NewVersion.WithoutV
             $packageConfig | ConvertTo-Json -Depth 10 | Set-Content "frontend/package.json" -Encoding UTF8
-            Write-Success "Updated frontend/package.json"
+            Write-Success "Updated frontend/package.json to version $($NewVersion.WithoutV)"
         }
         catch {
             Write-Warning "Failed to update frontend/package.json: $($_.Exception.Message)"
         }
     }
 
-    Write-Success "Version numbers updated successfully"
+    Write-Success "Version numbers updated successfully (version.json preserved as configuration template)"
 }
 
 function Build-Application($NewVersion, $GitHubInfo, $Config) {
@@ -423,14 +434,21 @@ function Build-Application($NewVersion, $GitHubInfo, $Config) {
 function Invoke-GitOperations($NewVersion, $Config) {
     Write-Info "Committing version update..."
 
-    # Add modified files
-    git add version.json
+    # Add modified files (excluding version.json which remains as config template)
+    Write-Info "Adding wails.json and frontend/package.json to git..."
     git add wails.json 2>$null
     git add frontend/package.json 2>$null
 
+    # Check if there are any changes to commit
+    $status = git status --porcelain 2>$null
+    if (-not $status) {
+        Write-Warning "No changes to commit. Files may already be up to date."
+        return
+    }
+
     # Create commit message
     $commitMessage = $Config.release.commit_message_template -replace '\{version\}', $NewVersion.WithV
-    $commitMessage += "`n`n- Update version in configuration files to $($NewVersion.WithoutV)`n- Prepare for Windows release $($NewVersion.WithV)"
+    $commitMessage += "`n`n- Update version in wails.json to $($NewVersion.WithoutV)`n- Update version in frontend/package.json to $($NewVersion.WithoutV)`n- Prepare for Windows release $($NewVersion.WithV)`n- Keep version.json as stable configuration template"
 
     $result = git commit -m $commitMessage 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -438,7 +456,7 @@ function Invoke-GitOperations($NewVersion, $Config) {
         throw "Commit failed"
     }
 
-    Write-Success "Version update committed"
+    Write-Success "Version update committed (version.json preserved)"
 
     # Create tag
     Write-Info "Creating tag $($NewVersion.WithV)..."
@@ -534,7 +552,7 @@ function Main {
         }
 
         # Get current version and GitHub info
-        $currentVersion = Get-CurrentVersion $config
+        $currentVersion = Get-CurrentVersion
         $gitHubInfo = Get-GitHubInfo $config
 
         Write-Info "Current version: v$currentVersion"

@@ -26,11 +26,13 @@ Use the automated PowerShell script for easy version management and release:
 
 ## Configuration Management
 
-All configuration is now managed through `version.json`:
+All configuration is managed through `version.json` **as a stable template**:
+
+> **Important**: `version.json` serves as a configuration template and is **NOT modified** during releases. Version numbers are managed through script parameters and applied to `wails.json` and `frontend/package.json` only.
 
 ```json
 {
-  "version": "1.2.1",
+  "version": "1.2.1",  // ⚠️ Template version - NOT updated by script
   "github": {
     "owner": "wangyaxings",
     "repo": "url-navigator"
@@ -54,17 +56,32 @@ All configuration is now managed through `version.json`:
 }
 ```
 
+### Design Philosophy
+
+- **`version.json`**: Stable configuration template (unchanged by releases)
+- **`wails.json`**: Updated with new version during release
+- **`frontend/package.json`**: Updated with new version during release
+- **Script parameters**: Source of truth for version numbers
+
 ## What the Script Does
 
 1. **Environment Check**: Verifies PowerShell 5.1+, Git, Go, Wails, and Yarn
-2. **Configuration Loading**: Loads settings from `version.json`
-3. **Version Validation**: Ensures proper version format
-4. **Repository Validation**: Ensures clean working directory
-5. **Auto-Detection**: Automatically detects GitHub repository from git remote
-6. **Version Management**: Updates version across all config files
-7. **Build Process**: Compiles frontend and Windows executable with injected version info
-8. **Git Operations**: Creates tags and pushes to repository
-9. **GitHub Integration**: Triggers automated GitHub Actions build
+2. **Configuration Loading**: Loads settings from `version.json` (template only)
+3. **Version Detection**: Reads current version from `wails.json` or `package.json`
+4. **Version Validation**: Ensures proper version format from script parameters
+5. **Repository Validation**: Ensures clean working directory
+6. **Auto-Detection**: Automatically detects GitHub repository from git remote
+7. **Selective Updates**: Updates `wails.json` and `frontend/package.json` only
+8. **Build Process**: Compiles frontend and Windows executable with injected version info
+9. **Git Operations**: Commits selective changes, creates tags and pushes to repository
+10. **GitHub Integration**: Triggers automated GitHub Actions build
+
+### Key Design Benefits
+
+- ✅ **Stable Configuration**: `version.json` never changes during releases
+- ✅ **Clean Commits**: Only essential files are modified per release
+- ✅ **Parameter-Driven**: Version numbers come from command line, not files
+- ✅ **Template Approach**: Configuration stays consistent across releases
 
 ## Prerequisites
 
@@ -111,13 +128,23 @@ wails build
 
 When you run `.\release.ps1 v1.3.0`:
 
-1. **Validation**: Checks environment and version format
-2. **Configuration**: Loads settings from `version.json`
-3. **Auto-Detection**: Detects GitHub repository from git remote
-4. **Updates**: Modifies `version.json`, `wails.json`, and `frontend/package.json`
-5. **Build**: Compiles application with version injection
-6. **Git Operations**: Commits, tags, and pushes changes
-7. **GitHub Actions**: Automatically triggered for release creation
+1. **Validation**: Checks environment and version format from parameter
+2. **Configuration**: Loads settings from `version.json` (template only)
+3. **Version Detection**: Reads current version from existing project files
+4. **Auto-Detection**: Detects GitHub repository from git remote
+5. **Selective Updates**: Modifies `wails.json` and `frontend/package.json` only
+6. **Build**: Compiles application with version injection
+7. **Git Operations**: Commits selective changes, tags, and pushes
+8. **GitHub Actions**: Automatically triggered for release creation
+
+### Version Management Flow
+
+```
+Script Parameter (v1.3.0) → wails.json + package.json → Git Commit
+                          ↗                           ↘
+           version.json (template)                    GitHub Release
+           [UNCHANGED]                                [AUTOMATED]
+```
 
 ## Error Handling and Recovery
 
@@ -133,7 +160,7 @@ The PowerShell script includes comprehensive error handling:
 
 ### GitHub Repository
 
-The script auto-detects your repository from `git remote origin`, but you can override in `version.json`:
+The script auto-detects your repository from `git remote origin`, but you can set defaults in `version.json`:
 
 ```json
 {
@@ -143,6 +170,8 @@ The script auto-detects your repository from `git remote origin`, but you can ov
   }
 }
 ```
+
+> **Note**: These values are used as fallbacks. Auto-detection from git remote takes priority.
 
 ### Build Settings
 
@@ -228,12 +257,26 @@ go mod tidy
 - Check if you have push permissions to the repository
 - Ensure GitHub authentication is configured
 
-## Version Display
+## Version Management Strategy
 
-The application dynamically fetches version information:
+The application uses a **template-based configuration** approach:
+
+### Version Sources
+- **Script Parameters**: Source of truth for new releases (e.g., `v1.3.0`)
+- **`wails.json`**: Updated during releases, used by application
+- **`frontend/package.json`**: Updated during releases, used by build system
+- **`version.json`**: Configuration template (**never modified by script**)
+
+### Version Display
 - Frontend components show version with `v` prefix (e.g., `v1.3.0`)
 - Configuration files store version without `v` prefix for compatibility
 - Auto-update system handles both formats correctly
+
+### Benefits
+- **Clean Git History**: Only essential files change per release
+- **Stable Configuration**: Template settings never drift
+- **Parameter-Driven**: Version control through command line
+- **Predictable Behavior**: No configuration file churn
 
 ## Development Workflow
 
