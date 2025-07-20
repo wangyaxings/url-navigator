@@ -1,50 +1,50 @@
 {
-    "$schema":  "https://wails.io/schemas/config.v2.json",
-    "name":  "URLNavigator",
-    "outputfilename":  "URLNavigator",
-    "frontend":  {
-                     "dir":  "./frontend",
-                     "install":  "yarn install",
-                     "build":  "yarn build",
-                     "dev":  "yarn dev",
-                     "package":  {
-                                     "manager":  "yarn"
-                                 }
-                 },
-    "author":  {
-                   "name":  "URLNavigator",
-                   "email":  "dev@urlnavigator.com"
-               },
-    "info":  {
-                 "productName":  "URL Navigator",
-                 "productDescription":  "A beautiful URL bookmark manager with auto-update functionality",
-                 "companyName":  "URLNavigator",
-                 "copyright":  "Copyright 濠?2025 URLNavigator. All rights reserved.",
-                 "version":  "1.3.6"
-             },
-    "github":  {
-                   "owner":  "wangyaxings",
-                   "repo":  "url-navigator",
-                   "comment":  "GitHub repository information for auto-update functionality"
-               },
-    "nsisType":  "single",
-    "build":  {
-                  "compiler":  "go",
-                  "flags":  [
-                                "-tags",
-                                "production",
-                                "-trimpath"
-                            ],
-                  "ldflags":  [
-                                  "-s",
-                                  "-w",
-                                  "-X main.Version={{.Info.Version}}",
-                                  "-X main.GitHubOwner={{.GitHub.Owner}}",
-                                  "-X main.GitHubRepo={{.GitHub.Repo}}"
-                              ]
-              },
-    "buildSettings":  {
-                          "generateVersionInfo":  true,
-                          "embedVersionInfo":  true
-                      }
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "author": {
+    "email": "dev@urlnavigator.com",
+    "name": "URLNavigator"
+  },
+  "build": {
+    "compiler": "go",
+    "flags": [
+      "-tags",
+      "production",
+      "-trimpath"
+    ],
+    "ldflags": [
+      "-s",
+      "-w",
+      "-X main.Version={{.Info.Version}}",
+      "-X main.GitHubOwner={{.GitHub.Owner}}",
+      "-X main.GitHubRepo={{.GitHub.Repo}}"
+    ]
+  },
+  "buildSettings": {
+    "embedVersionInfo": true,
+    "generateVersionInfo": true
+  },
+  "frontend": {
+    "build": "yarn build",
+    "dev": "yarn dev",
+    "dir": "./frontend",
+    "install": "yarn install",
+    "package": {
+      "manager": "yarn"
+    }
+  },
+  "github": {
+    "comment": "GitHub repository information for auto-update functionality",
+    "owner": "wangyaxings",
+    "repo": "url-navigator"
+  },
+  "info": {
+    "companyName": "URLNavigator",
+    "copyright": "Copyright 濠?2025 URLNavigator. All rights reserved.",
+    "productDescription": "A beautiful URL bookmark manager with auto-update functionality",
+    "productName": "URL Navigator",
+    "version": "1.3.7"
+  },
+  "name": "URLNavigator",
+  "nsisType": "single",
+  "outputfilename": "URLNavigator"
 }
