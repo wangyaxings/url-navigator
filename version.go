@@ -1,3 +1,4 @@
+// version.go - 改进版本管理逻辑
 package main
 
 import (
@@ -21,13 +22,57 @@ var (
 	RuntimeVersion *VersionInfo
 
 	// 编译时注入的版本信息（通过 ldflags）
-	Version     = "dev"      // -ldflags "-X main.Version=1.2.0"
-	GitHubOwner = ""         // -ldflags "-X main.GitHubOwner=yourusername"
-	GitHubRepo  = ""         // -ldflags "-X main.GitHubRepo=url-navigator"
+	Version     = "dev"           // -ldflags "-X main.Version=1.2.0"
+	GitHubOwner = ""              // -ldflags "-X main.GitHubOwner=yourusername"
+	GitHubRepo  = ""              // -ldflags "-X main.GitHubRepo=url-navigator"
 	AppName     = "URLNavigator"
 )
 
-// InitVersionInfo 初始化版本信息
+// GetCurrentVersion 获取当前应用版本
+func (a *App) GetCurrentVersion() string {
+	// 修复：确保总是返回实际的当前版本，而不是固定值
+	if RuntimeVersion == nil {
+		// 如果运行时版本未初始化，尝试重新初始化
+		if err := InitVersionInfo(a.GetDataDir()); err != nil {
+			// 初始化失败时，检查编译时注入的版本
+			if Version != "dev" && Version != "" {
+				return ensureVersionPrefix(Version)
+			}
+			// 作为最后的兜底，直接尝试从wails.json读取
+			if version, _, _, err := readVersionFromWailsConfig(); err == nil && version != "" {
+				return ensureVersionPrefix(version)
+			}
+			return "unknown"
+		}
+	}
+
+	if RuntimeVersion.Version == "" || RuntimeVersion.Version == "unknown" {
+		// 如果运行时版本为空，尝试使用编译时版本
+		if Version != "dev" && Version != "" {
+			return ensureVersionPrefix(Version)
+		}
+		// 作为兜底，直接从wails.json读取
+		if version, _, _, err := readVersionFromWailsConfig(); err == nil && version != "" {
+			return ensureVersionPrefix(version)
+		}
+		return "unknown"
+	}
+
+	return ensureVersionPrefix(RuntimeVersion.Version)
+}
+
+// ensureVersionPrefix 确保版本号有v前缀
+func ensureVersionPrefix(version string) string {
+	if version == "" || version == "unknown" || version == "dev" {
+		return version
+	}
+	if !strings.HasPrefix(version, "v") {
+		return "v" + version
+	}
+	return version
+}
+
+// InitVersionInfo 初始化版本信息 - 改进的版本
 func InitVersionInfo(dataDir string) error {
 	// 1. 首先尝试从编译时注入的信息获取（最高优先级）
 	if Version != "dev" && Version != "" {
@@ -37,6 +82,7 @@ func InitVersionInfo(dataDir string) error {
 			GitHubRepo:  getGitHubRepo(),
 			AppName:     AppName,
 		}
+
 		return nil
 	}
 
@@ -49,18 +95,11 @@ func InitVersionInfo(dataDir string) error {
 			GitHubRepo:  repo,
 			AppName:     AppName,
 		}
+
 		return nil
 	}
 
-	// 3. 尝试从用户配置文件读取（第三优先级）
-	configPath := filepath.Join(dataDir, "version.json")
-	if data, err := os.ReadFile(configPath); err == nil {
-		var config VersionInfo
-		if json.Unmarshal(data, &config) == nil && config.Version != "" {
-			RuntimeVersion = &config
-			return nil
-		}
-	}
+	// 3. 跳过用户配置文件，因为它可能是过时的
 
 	// 4. 最后从根目录的 version.json 读取（兜底方案）
 	if data, err := os.ReadFile("version.json"); err == nil {
@@ -78,38 +117,21 @@ func InitVersionInfo(dataDir string) error {
 				GitHubRepo:  config.GitHub.Repo,
 				AppName:     AppName,
 			}
-			// 保存到用户配置目录
-			saveVersionConfig(configPath, RuntimeVersion)
+
 			return nil
 		}
 	}
 
-	// 5. 如果所有方式都失败，使用默认配置（但不硬编码版本号）
+	// 5. 如果所有方法都失败，创建一个默认配置
 	RuntimeVersion = &VersionInfo{
-		Version:     "unknown", // 不再硬编码版本号
-		GitHubOwner: "wangyaxings",
-		GitHubRepo:  "url-navigator",
+		Version:     "unknown",
+		GitHubOwner: getGitHubOwner(),
+		GitHubRepo:  getGitHubRepo(),
 		AppName:     AppName,
 	}
 
-	// 保存默认配置到文件
-	return saveVersionConfig(configPath, RuntimeVersion)
-}
 
-// getGitHubOwner 获取GitHub用户名，优先使用编译时注入的值
-func getGitHubOwner() string {
-	if GitHubOwner != "" {
-		return GitHubOwner
-	}
-	return "wangyaxings" // 默认值
-}
-
-// getGitHubRepo 获取GitHub仓库名，优先使用编译时注入的值
-func getGitHubRepo() string {
-	if GitHubRepo != "" {
-		return GitHubRepo
-	}
-	return "url-navigator" // 默认值
+	return fmt.Errorf("无法确定应用版本，请检查版本配置文件")
 }
 
 // readVersionFromWailsConfig 从 wails.json 读取版本信息
@@ -160,24 +182,6 @@ func saveVersionConfig(configPath string, config *VersionInfo) error {
 		return err
 	}
 	return os.WriteFile(configPath, data, 0644)
-}
-
-// GetCurrentVersion 获取当前版本（确保有v前缀）
-func (a *App) GetCurrentVersion() string {
-	if RuntimeVersion == nil {
-		return "unknown"
-	}
-
-	version := RuntimeVersion.Version
-	if version == "" || version == "unknown" {
-		return "unknown"
-	}
-
-	// 确保版本号有v前缀用于显示
-	if !strings.HasPrefix(version, "v") {
-		return "v" + version
-	}
-	return version
 }
 
 // GetVersionInfo 获取完整版本信息
@@ -232,4 +236,20 @@ func (a *App) GetVersionFromWails() (string, error) {
 	}
 
 	return version, nil
+}
+
+// getGitHubOwner 获取GitHub用户名，优先使用编译时注入的值
+func getGitHubOwner() string {
+	if GitHubOwner != "" {
+		return GitHubOwner
+	}
+	return "wangyaxings" // 默认值
+}
+
+// getGitHubRepo 获取GitHub仓库名，优先使用编译时注入的值
+func getGitHubRepo() string {
+	if GitHubRepo != "" {
+		return GitHubRepo
+	}
+	return "url-navigator" // 默认值
 }
