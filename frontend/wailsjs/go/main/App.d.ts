@@ -18,6 +18,8 @@ export function EnsureDataDir():Promise<void>;
 
 export function ExportBookmarks():Promise<string>;
 
+export function ForceReloadVersion():Promise<void>;
+
 export function GetCategories():Promise<Array<main.Category>>;
 
 export function GetCurrentVersion():Promise<string>;
@@ -27,6 +29,8 @@ export function GetDataDir():Promise<string>;
 export function GetURLs():Promise<Array<main.URLItem>>;
 
 export function GetUpdateProgress():Promise<main.UpdateProgress>;
+
+export function GetVersionFromWails():Promise<string>;
 
 export function GetVersionInfo():Promise<main.VersionInfo>;
 

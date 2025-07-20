@@ -17,7 +17,7 @@ import { KeyboardShortcutsHelp, KeyboardShortcutTooltip } from '@/components/Key
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ContextMenu } from '@/components/ContextMenu';
 import { ImportExport } from '@/components/ImportExport';
-import { VersionInfo } from '@/components/VersionInfo';
+import { SimpleVersionInfo } from '@/components/VersionInfo';
 import { apiCache, searchCache, withCache } from '@/lib/cacheManager';
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy } from '@dnd-kit/sortable';
@@ -295,7 +295,7 @@ function App() {
             <p className="text-muted-foreground mt-1">管理您的网址收藏</p>
           </div>
           <div className="flex items-center space-x-3">
-            <VersionInfo />
+            <SimpleVersionInfo />
             <ImportExport onImportComplete={refreshData} />
             <ThemeToggle />
             <UpdateChecker />

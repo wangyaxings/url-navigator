@@ -34,6 +34,10 @@ export function ExportBookmarks() {
   return window['go']['main']['App']['ExportBookmarks']();
 }
 
+export function ForceReloadVersion() {
+  return window['go']['main']['App']['ForceReloadVersion']();
+}
+
 export function GetCategories() {
   return window['go']['main']['App']['GetCategories']();
 }
@@ -52,6 +56,10 @@ export function GetURLs() {
 
 export function GetUpdateProgress() {
   return window['go']['main']['App']['GetUpdateProgress']();
+}
+
+export function GetVersionFromWails() {
+  return window['go']['main']['App']['GetVersionFromWails']();
 }
 
 export function GetVersionInfo() {

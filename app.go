@@ -441,11 +441,17 @@ func (a *App) ExportBookmarks() (string, error) {
 		return "", err
 	}
 
+	// 获取当前版本信息
+	currentVersion := "unknown"
+	if RuntimeVersion != nil && RuntimeVersion.Version != "" {
+		currentVersion = RuntimeVersion.Version
+	}
+
 	exportData := map[string]interface{}{
 		"bookmarks":  urls,
 		"categories": categories,
 		"exportedAt": time.Now(),
-		"version":    "1.2.1",
+		"version":    currentVersion,
 	}
 
 	jsonData, err := json.MarshalIndent(exportData, "", "  ")
