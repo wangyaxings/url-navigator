@@ -6,7 +6,11 @@
   },
   "build": {
     "compiler": "go",
-    "flags": ["-tags", "production", "-trimpath"],
+    "flags": [
+      "-tags",
+      "production",
+      "-trimpath"
+    ],
     "ldflags": "-s -w -X main.Version=1.4.0 -X main.GitHubOwner=wangyaxings -X main.GitHubRepo=url-navigator"
   },
   "buildSettings": {
@@ -32,7 +36,7 @@
     "copyright": "Copyright@2025 URLNavigator. All rights reserved.",
     "productDescription": "A beautiful URL bookmark manager with auto-update functionality",
     "productName": "URL Navigator",
-    "version": "1.4.0"
+    "version": "1.4.1"
   },
   "name": "URLNavigator",
   "nsisType": "single",
