@@ -4,9 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Github, ExternalLink, RefreshCw, Bug, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Github, ExternalLink, RefreshCw, AlertTriangle, CheckCircle } from 'lucide-react';
 import { AppService } from '@/services/appService';
-import { VersionDebug } from './VersionDebug';
+
 
 interface VersionInfoProps {
   isOpen: boolean;
@@ -65,7 +65,7 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
     app_name: 'URLNavigator'
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
+
   const [versionSource, setVersionSource] = useState<{
     source: string;
     is_default: boolean;
@@ -132,15 +132,7 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
           <DialogTitle className="flex items-center">
             关于 {versionData.app_name}
             <div className="ml-auto flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowDebug(true)}
-                className="h-6 w-6 p-0"
-                title="调试信息"
-              >
-                <Bug className="h-4 w-4" />
-              </Button>
+
               <Button
                 variant="ghost"
                 size="sm"
@@ -249,8 +241,7 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
           </div>
         </div>
 
-        {/* 版本调试对话框 */}
-        <VersionDebug isOpen={showDebug} onClose={() => setShowDebug(false)} />
+
       </DialogContent>
     </Dialog>
   );
@@ -305,7 +296,9 @@ export function SimpleVersionInfo() {
         {version}
       </div>
       {!isReliable && (
-        <AlertTriangle className="h-3 w-3 text-yellow-600" title="版本可能不准确" />
+        <div title="版本可能不准确">
+          <AlertTriangle className="h-3 w-3 text-yellow-600" />
+        </div>
       )}
     </div>
   );

@@ -36,7 +36,7 @@
     "copyright": "Copyright@2025 URLNavigator. All rights reserved.",
     "productDescription": "A beautiful URL bookmark manager with auto-update functionality",
     "productName": "URL Navigator",
-    "version": "1.4.2"
+    "version": "1.4.3"
   },
   "name": "URLNavigator",
   "nsisType": "single",
