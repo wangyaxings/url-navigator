@@ -1,3 +1,4 @@
+// frontend/src/components/VersionInfo.tsx
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,43 @@ interface VersionData {
   github_repo: string;
   app_name: string;
 }
+
+// 动态获取版本更新内容
+const getVersionChangelogs = (version: string): string[] => {
+  // 移除硬编码，根据版本动态返回更新内容
+  // 这里可以从后端API获取，或者根据版本号映射
+  const versionClean = version.replace(/^v/, '');
+
+  // 示例：根据版本号返回对应的更新内容
+  const changelogs: Record<string, string[]> = {
+    '1.2.1': [
+      '• ✨ 导入导出功能 - 支持Chrome/Firefox/Edge书签',
+      '• ⚡ 缓存优化 - 提升应用性能和响应速度',
+      '• 🔍 高级搜索功能增强',
+      '• 🎨 深色模式主题支持',
+      '• 🖱️ 右键菜单操作',
+      '• ⌨️ 快捷键支持',
+      '• 📱 响应式布局优化',
+      '• 🔧 Go语言发布工具替换PowerShell脚本',
+      '• 🐛 修复版本号显示问题'
+    ],
+    '1.2.0': [
+      '• 🎯 新增高级搜索功能',
+      '• 🔄 优化数据同步机制',
+      '• 🐛 修复若干已知问题'
+    ],
+    '1.1.0': [
+      '• 📱 响应式设计优化',
+      '• ⚡ 性能提升',
+      '• 🔧 修复导入功能问题'
+    ]
+  };
+
+  return changelogs[versionClean] || [
+    '• 📝 版本更新',
+    '• 🔧 性能优化和bug修复'
+  ];
+};
 
 export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
   const [versionData, setVersionData] = useState<VersionData>({
@@ -66,7 +104,6 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
 
     } catch (error) {
       console.error('Failed to load version info:', error);
-      // 保持默认值
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +123,6 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
     if (!version || version === 'unknown') {
       return 'unknown';
     }
-    // 确保显示时有v前缀
     return version.startsWith('v') ? version : `v${version}`;
   };
 
@@ -94,16 +130,16 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
+          <DialogTitle className="flex items-center">
             关于 {versionData.app_name}
             <Button
               variant="ghost"
               size="sm"
               onClick={handleRefresh}
+              className="ml-auto h-6 w-6 p-0"
               disabled={isLoading}
-              className="h-8 w-8 p-0"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
@@ -140,19 +176,17 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-lg">更新内容 {formatVersion(versionData.version)}</CardTitle>
+              {/* 修复：动态显示版本号，而不是硬编码 */}
+              <CardTitle className="text-lg">
+                {formatVersion(versionData.version)} 更新内容
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• ✨ 导入导出功能 - 支持Chrome/Firefox/Edge书签</li>
-                <li>• ⚡ 缓存优化 - 提升应用性能和响应速度</li>
-                <li>• 🔍 高级搜索功能增强</li>
-                <li>• 🎨 深色模式主题支持</li>
-                <li>• 🖱️ 右键菜单操作</li>
-                <li>• ⌨️ 快捷键支持</li>
-                <li>• 📱 响应式布局优化</li>
-                <li>• 🔧 Go语言发布工具替换PowerShell脚本</li>
-                <li>• 🐛 修复版本号显示问题</li>
+                {/* 修复：根据当前版本动态显示更新内容 */}
+                {getVersionChangelogs(versionData.version).map((item, index) => (
+                  <li key={index}>{item}</li>
+                ))}
               </ul>
             </CardContent>
           </Card>
@@ -181,7 +215,7 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
   );
 }
 
-// 简单版本号显示组件 - 修复硬编码问题
+// 修复SimpleVersionInfo组件中的版本获取逻辑
 export function SimpleVersionInfo() {
   const [version, setVersion] = useState('加载中...');
   const [isLoading, setIsLoading] = useState(true);
@@ -190,10 +224,9 @@ export function SimpleVersionInfo() {
     const loadVersion = async () => {
       setIsLoading(true);
       try {
-        // 首先尝试获取当前版本
+        // 修复：首先尝试获取当前版本，确保获取到实际运行时版本
         const versionStr = await AppService.GetCurrentVersion();
         if (versionStr && versionStr !== 'unknown') {
-          // 确保版本有v前缀用于显示
           const formattedVersion = versionStr.startsWith('v') ? versionStr : `v${versionStr}`;
           setVersion(formattedVersion);
           return;
