@@ -18,6 +18,10 @@ export function CheckForUpdates() {
   return window['go']['main']['App']['CheckForUpdates']();
 }
 
+export function DebugVersionInfo() {
+  return window['go']['main']['App']['DebugVersionInfo']();
+}
+
 export function DeleteURL(arg1) {
   return window['go']['main']['App']['DeleteURL'](arg1);
 }
@@ -44,6 +48,10 @@ export function GetCategories() {
 
 export function GetCurrentVersion() {
   return window['go']['main']['App']['GetCurrentVersion']();
+}
+
+export function GetCurrentVersionWithSource() {
+  return window['go']['main']['App']['GetCurrentVersionWithSource']();
 }
 
 export function GetDataDir() {

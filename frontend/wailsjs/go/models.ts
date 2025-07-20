@@ -143,6 +143,8 @@ export namespace main {
 	    github_owner: string;
 	    github_repo: string;
 	    app_name: string;
+	    source: string;
+	    is_default: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new VersionInfo(source);
@@ -154,6 +156,8 @@ export namespace main {
 	        this.github_owner = source["github_owner"];
 	        this.github_repo = source["github_repo"];
 	        this.app_name = source["app_name"];
+	        this.source = source["source"];
+	        this.is_default = source["is_default"];
 	    }
 	}
 

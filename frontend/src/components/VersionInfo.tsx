@@ -4,8 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Github, ExternalLink, RefreshCw } from 'lucide-react';
+import { Github, ExternalLink, RefreshCw, Bug, AlertTriangle, CheckCircle } from 'lucide-react';
 import { AppService } from '@/services/appService';
+import { VersionDebug } from './VersionDebug';
 
 interface VersionInfoProps {
   isOpen: boolean;
@@ -64,6 +65,12 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
     app_name: 'URLNavigator'
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [versionSource, setVersionSource] = useState<{
+    source: string;
+    is_default: boolean;
+    reliable: boolean;
+  } | null>(null);
 
   const setIsOpen = (open: boolean) => {
     if (!open) onClose();
@@ -72,34 +79,24 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
   const loadVersionInfo = async () => {
     setIsLoading(true);
     try {
-      // 首先尝试获取完整版本信息
-      const fullVersionInfo = await AppService.GetVersionInfo();
-      if (fullVersionInfo && fullVersionInfo.version && fullVersionInfo.version !== 'unknown') {
+      // 并行获取版本信息和来源信息
+      const [fullVersionInfo, versionWithSource] = await Promise.all([
+        AppService.GetVersionInfo(),
+        AppService.GetCurrentVersionWithSource()
+      ]);
+
+      // 设置版本数据
+      if (fullVersionInfo) {
         setVersionData(fullVersionInfo);
-        return;
       }
 
-      // 如果获取完整信息失败，尝试获取当前版本
-      const currentVersion = await AppService.GetCurrentVersion();
-      if (currentVersion && currentVersion !== 'unknown') {
-        setVersionData(prev => ({
-          ...prev,
-          version: currentVersion
-        }));
-        return;
-      }
-
-      // 最后尝试从wails.json获取版本（调试用）
-      try {
-        const wailsVersion = await AppService.GetVersionFromWails();
-        if (wailsVersion && wailsVersion !== 'unknown') {
-          setVersionData(prev => ({
-            ...prev,
-            version: wailsVersion
-          }));
-        }
-      } catch (error) {
-        console.warn('Failed to get version from wails.json:', error);
+      // 设置版本来源信息
+      if (versionWithSource) {
+        setVersionSource({
+          source: versionWithSource.source,
+          is_default: versionWithSource.is_default,
+          reliable: versionWithSource.reliable
+        });
       }
 
     } catch (error) {
@@ -134,15 +131,27 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center">
             关于 {versionData.app_name}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRefresh}
-              className="ml-auto h-6 w-6 p-0"
-              disabled={isLoading}
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </Button>
+            <div className="ml-auto flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowDebug(true)}
+                className="h-6 w-6 p-0"
+                title="调试信息"
+              >
+                <Bug className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                className="h-6 w-6 p-0"
+                disabled={isLoading}
+                title="刷新版本"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
@@ -153,10 +162,39 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">当前版本</span>
-                <Badge variant="secondary" className={isLoading ? 'animate-pulse' : ''}>
-                  {formatVersion(versionData.version)}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant={versionSource?.reliable ? "default" : "secondary"}
+                    className={isLoading ? 'animate-pulse' : ''}
+                  >
+                    {formatVersion(versionData.version)}
+                  </Badge>
+                  {versionSource && (
+                    <div className="flex items-center gap-1">
+                      {versionSource.reliable ? (
+                        <CheckCircle className="h-3 w-3 text-green-600" />
+                      ) : (
+                        <AlertTriangle className="h-3 w-3 text-yellow-600" />
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
+              {versionSource && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">版本来源</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      {AppService.getSourceDescription(versionSource.source)}
+                    </span>
+                    {versionSource.is_default && (
+                      <Badge variant="outline" className="text-xs">
+                        {versionSource.reliable ? '默认' : '兜底'}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">构建日期</span>
                 <span className="text-sm text-muted-foreground">{buildDate}</span>
@@ -210,6 +248,9 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
             </Button>
           </div>
         </div>
+
+        {/* 版本调试对话框 */}
+        <VersionDebug isOpen={showDebug} onClose={() => setShowDebug(false)} />
       </DialogContent>
     </Dialog>
   );
@@ -219,44 +260,29 @@ export function VersionInfo({ isOpen, onClose }: VersionInfoProps) {
 export function SimpleVersionInfo() {
   const [version, setVersion] = useState('加载中...');
   const [isLoading, setIsLoading] = useState(true);
+  const [isReliable, setIsReliable] = useState(true);
 
   useEffect(() => {
     const loadVersion = async () => {
       setIsLoading(true);
       try {
-        // 修复：首先尝试获取当前版本，确保获取到实际运行时版本
+        // 获取版本和来源信息
+        const versionWithSource = await AppService.GetCurrentVersionWithSource();
+        if (versionWithSource) {
+          setVersion(versionWithSource.version);
+          setIsReliable(versionWithSource.reliable);
+          return;
+        }
+
+        // 兜底方案：尝试获取当前版本
         const versionStr = await AppService.GetCurrentVersion();
-        if (versionStr && versionStr !== 'unknown') {
-          const formattedVersion = versionStr.startsWith('v') ? versionStr : `v${versionStr}`;
-          setVersion(formattedVersion);
-          return;
-        }
-
-        // 如果失败，尝试获取完整版本信息
-        const versionInfo = await AppService.GetVersionInfo();
-        if (versionInfo && versionInfo.version && versionInfo.version !== 'unknown') {
-          const formattedVersion = versionInfo.version.startsWith('v') ? versionInfo.version : `v${versionInfo.version}`;
-          setVersion(formattedVersion);
-          return;
-        }
-
-        // 最后尝试从wails.json获取
-        try {
-          const wailsVersion = await AppService.GetVersionFromWails();
-          if (wailsVersion && wailsVersion !== 'unknown') {
-            setVersion(wailsVersion);
-            return;
-          }
-        } catch (error) {
-          console.warn('Failed to get version from wails.json:', error);
-        }
-
-        // 如果所有方法都失败，显示unknown
-        setVersion('unknown');
+        setVersion(versionStr || 'unknown');
+        setIsReliable(false);
 
       } catch (error) {
         console.error('Failed to get version:', error);
         setVersion('unknown');
+        setIsReliable(false);
       } finally {
         setIsLoading(false);
       }
@@ -274,8 +300,13 @@ export function SimpleVersionInfo() {
   }
 
   return (
-    <div className="text-xs text-muted-foreground">
-      {version}
+    <div className="flex items-center gap-1">
+      <div className="text-xs text-muted-foreground">
+        {version}
+      </div>
+      {!isReliable && (
+        <AlertTriangle className="h-3 w-3 text-yellow-600" title="版本可能不准确" />
+      )}
     </div>
   );
 }

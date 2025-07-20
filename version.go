@@ -9,12 +9,25 @@ import (
 	"strings"
 )
 
+// VersionSource 版本来源类型
+type VersionSource string
+
+const (
+	SourceCompileTime VersionSource = "compile_time"   // 编译时注入
+	SourceWailsJSON   VersionSource = "wails_json"     // wails.json文件
+	SourceVersionJSON VersionSource = "version_json"   // version.json文件
+	SourceDefault     VersionSource = "default"        // 默认值（兜底）
+	SourceUnknown     VersionSource = "unknown"        // 无法确定
+)
+
 // VersionInfo 版本信息结构
 type VersionInfo struct {
-	Version     string `json:"version"`
-	GitHubOwner string `json:"github_owner"`
-	GitHubRepo  string `json:"github_repo"`
-	AppName     string `json:"app_name"`
+	Version     string        `json:"version"`
+	GitHubOwner string        `json:"github_owner"`
+	GitHubRepo  string        `json:"github_repo"`
+	AppName     string        `json:"app_name"`
+	Source      VersionSource `json:"source"`       // 版本来源
+	IsDefault   bool          `json:"is_default"`   // 是否为默认值
 }
 
 var (
@@ -22,48 +35,59 @@ var (
 	RuntimeVersion *VersionInfo
 
 	// 编译时注入的版本信息（通过 ldflags）
-	Version     = "dev"           // -ldflags "-X main.Version=1.2.0"
-	GitHubOwner = ""              // -ldflags "-X main.GitHubOwner=yourusername"
-	GitHubRepo  = ""              // -ldflags "-X main.GitHubRepo=url-navigator"
+	Version     = "1.4.2"        // -ldflags "-X main.Version=1.4.2" (设置默认值)
+	GitHubOwner = "wangyaxings"   // -ldflags "-X main.GitHubOwner=wangyaxings"
+	GitHubRepo  = "url-navigator" // -ldflags "-X main.GitHubRepo=url-navigator"
 	AppName     = "URLNavigator"
 )
 
 // GetCurrentVersion 获取当前应用版本
 func (a *App) GetCurrentVersion() string {
-	// 修复：确保总是返回实际的当前版本，而不是固定值
+	// 确保版本信息已初始化
 	if RuntimeVersion == nil {
-		// 如果运行时版本未初始化，尝试重新初始化
-		if err := InitVersionInfo(a.GetDataDir()); err != nil {
-			// 初始化失败时，检查编译时注入的版本
-			if Version != "dev" && Version != "" {
-				return ensureVersionPrefix(Version)
-			}
-			// 作为最后的兜底，直接尝试从wails.json读取
-			if version, _, _, err := readVersionFromWailsConfig(); err == nil && version != "" {
-				return ensureVersionPrefix(version)
-			}
-			return "unknown"
+		InitVersionInfo(a.GetDataDir())
+	}
+
+	if RuntimeVersion != nil {
+		return ensureVersionPrefix(RuntimeVersion.Version)
+	}
+
+	// 如果仍然为nil，返回带标识的默认版本
+	return "v1.4.2-default"
+}
+
+// GetCurrentVersionWithSource 获取当前版本及其来源信息
+func (a *App) GetCurrentVersionWithSource() map[string]interface{} {
+	// 确保版本信息已初始化
+	if RuntimeVersion == nil {
+		InitVersionInfo(a.GetDataDir())
+	}
+
+	if RuntimeVersion != nil {
+		return map[string]interface{}{
+			"version":    ensureVersionPrefix(RuntimeVersion.Version),
+			"source":     string(RuntimeVersion.Source),
+			"is_default": RuntimeVersion.IsDefault,
+			"reliable":   !RuntimeVersion.IsDefault,
 		}
 	}
 
-	if RuntimeVersion.Version == "" || RuntimeVersion.Version == "unknown" {
-		// 如果运行时版本为空，尝试使用编译时版本
-		if Version != "dev" && Version != "" {
-			return ensureVersionPrefix(Version)
-		}
-		// 作为兜底，直接从wails.json读取
-		if version, _, _, err := readVersionFromWailsConfig(); err == nil && version != "" {
-			return ensureVersionPrefix(version)
-		}
-		return "unknown"
+	// 完全失败的情况
+	return map[string]interface{}{
+		"version":    "v1.4.2-fallback",
+		"source":     string(SourceDefault),
+		"is_default": true,
+		"reliable":   false,
 	}
-
-	return ensureVersionPrefix(RuntimeVersion.Version)
 }
 
 // ensureVersionPrefix 确保版本号有v前缀
 func ensureVersionPrefix(version string) string {
 	if version == "" || version == "unknown" || version == "dev" {
+		// 如果是空值或unknown，返回默认版本
+		if version == "" || version == "unknown" {
+			return "v1.4.2"
+		}
 		return version
 	}
 	if !strings.HasPrefix(version, "v") {
@@ -72,17 +96,18 @@ func ensureVersionPrefix(version string) string {
 	return version
 }
 
-// InitVersionInfo 初始化版本信息 - 改进的版本
+// InitVersionInfo 初始化版本信息 - 改进版本，记录版本来源
 func InitVersionInfo(dataDir string) error {
 	// 1. 首先尝试从编译时注入的信息获取（最高优先级）
-	if Version != "dev" && Version != "" {
+	if Version != "" && Version != "dev" && Version != "unknown" && Version != "1.4.2" {
 		RuntimeVersion = &VersionInfo{
 			Version:     Version,
 			GitHubOwner: getGitHubOwner(),
 			GitHubRepo:  getGitHubRepo(),
 			AppName:     AppName,
+			Source:      SourceCompileTime,
+			IsDefault:   false,
 		}
-
 		return nil
 	}
 
@@ -94,8 +119,9 @@ func InitVersionInfo(dataDir string) error {
 			GitHubOwner: owner,
 			GitHubRepo:  repo,
 			AppName:     AppName,
+			Source:      SourceWailsJSON,
+			IsDefault:   false,
 		}
-
 		return nil
 	}
 
@@ -116,22 +142,38 @@ func InitVersionInfo(dataDir string) error {
 				GitHubOwner: config.GitHub.Owner,
 				GitHubRepo:  config.GitHub.Repo,
 				AppName:     AppName,
+				Source:      SourceVersionJSON,
+				IsDefault:   false,
 			}
-
 			return nil
 		}
 	}
 
-	// 5. 如果所有方法都失败，创建一个默认配置
+	// 5. 检查编译时是否设置了默认版本
+	if Version == "1.4.2" {
+		// 这可能是编译时设置的，但我们无法确定是真实版本还是我们的默认值
+		RuntimeVersion = &VersionInfo{
+			Version:     Version,
+			GitHubOwner: getGitHubOwner(),
+			GitHubRepo:  getGitHubRepo(),
+			AppName:     AppName,
+			Source:      SourceCompileTime,
+			IsDefault:   true, // 标记为可能是默认值
+		}
+		return nil
+	}
+
+	// 6. 最后的兜底方案
 	RuntimeVersion = &VersionInfo{
-		Version:     "unknown",
+		Version:     "1.4.2",
 		GitHubOwner: getGitHubOwner(),
 		GitHubRepo:  getGitHubRepo(),
 		AppName:     AppName,
+		Source:      SourceDefault,
+		IsDefault:   true,
 	}
 
-
-	return fmt.Errorf("无法确定应用版本，请检查版本配置文件")
+	return nil
 }
 
 // readVersionFromWailsConfig 从 wails.json 读取版本信息
@@ -186,18 +228,29 @@ func saveVersionConfig(configPath string, config *VersionInfo) error {
 
 // GetVersionInfo 获取完整版本信息
 func (a *App) GetVersionInfo() VersionInfo {
+	// 如果RuntimeVersion为nil，尝试初始化
 	if RuntimeVersion == nil {
-		return VersionInfo{
-			Version:     "unknown",
-			GitHubOwner: getGitHubOwner(),
-			GitHubRepo:  getGitHubRepo(),
-			AppName:     AppName,
+		if err := InitVersionInfo(a.GetDataDir()); err != nil {
+			// 初始化失败，返回默认版本信息
+			return VersionInfo{
+				Version:     "1.4.2",
+				GitHubOwner: getGitHubOwner(),
+				GitHubRepo:  getGitHubRepo(),
+				AppName:     AppName,
+				Source:      SourceDefault,
+				IsDefault:   true,
+			}
 		}
 	}
 
 	// 返回一个副本，确保版本号格式正确
 	info := *RuntimeVersion
-	if info.Version != "" && info.Version != "unknown" && !strings.HasPrefix(info.Version, "v") {
+	if info.Version == "" || info.Version == "unknown" {
+		info.Version = "1.4.2"
+		info.Source = SourceDefault
+		info.IsDefault = true
+	}
+	if !strings.HasPrefix(info.Version, "v") {
 		info.Version = "v" + info.Version
 	}
 
@@ -252,4 +305,67 @@ func getGitHubRepo() string {
 		return GitHubRepo
 	}
 	return "url-navigator" // 默认值
+}
+
+// DebugVersionInfo 获取版本调试信息，用于排查版本获取问题
+func (a *App) DebugVersionInfo() map[string]interface{} {
+	debug := make(map[string]interface{})
+
+	// 编译时版本信息
+	debug["compile_time_version"] = Version
+	debug["compile_time_owner"] = GitHubOwner
+	debug["compile_time_repo"] = GitHubRepo
+	debug["app_name"] = AppName
+
+	// 运行时版本信息
+	if RuntimeVersion != nil {
+		debug["runtime_version"] = RuntimeVersion.Version
+		debug["runtime_owner"] = RuntimeVersion.GitHubOwner
+		debug["runtime_repo"] = RuntimeVersion.GitHubRepo
+		debug["runtime_app_name"] = RuntimeVersion.AppName
+		debug["runtime_source"] = string(RuntimeVersion.Source)
+		debug["runtime_is_default"] = RuntimeVersion.IsDefault
+	} else {
+		debug["runtime_version"] = "nil"
+	}
+
+	// 尝试从wails.json读取
+	if version, owner, repo, err := readVersionFromWailsConfig(); err == nil {
+		debug["wails_json_version"] = version
+		debug["wails_json_owner"] = owner
+		debug["wails_json_repo"] = repo
+		debug["wails_json_available"] = true
+	} else {
+		debug["wails_json_error"] = err.Error()
+		debug["wails_json_available"] = false
+	}
+
+	// 尝试从version.json读取
+	if data, err := os.ReadFile("version.json"); err == nil {
+		var config struct {
+			Version string `json:"version"`
+		}
+		if json.Unmarshal(data, &config) == nil {
+			debug["version_json_version"] = config.Version
+			debug["version_json_available"] = true
+		} else {
+			debug["version_json_parse_error"] = "failed to parse"
+			debug["version_json_available"] = false
+		}
+	} else {
+		debug["version_json_error"] = err.Error()
+		debug["version_json_available"] = false
+	}
+
+	// 当前获取到的版本和来源信息
+	debug["current_version"] = a.GetCurrentVersion()
+	versionWithSource := a.GetCurrentVersionWithSource()
+	debug["current_version_source"] = versionWithSource["source"]
+	debug["current_version_is_default"] = versionWithSource["is_default"]
+	debug["current_version_reliable"] = versionWithSource["reliable"]
+
+	// 数据目录
+	debug["data_dir"] = a.GetDataDir()
+
+	return debug
 }

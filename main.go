@@ -33,9 +33,14 @@ func (a *App) OnStartup(ctx context.Context) {
 	if err := InitVersionInfo(dataDir); err != nil {
 		// 记录错误但不阻止应用启动
 		fmt.Printf("警告: 版本信息初始化失败: %v\n", err)
-	} else {
+	}
+
+	// 输出版本调试信息
+	if RuntimeVersion != nil {
 		fmt.Printf("版本信息初始化成功: %s\n", RuntimeVersion.Version)
 	}
+	fmt.Printf("编译时注入版本: %s\n", Version)
+	fmt.Printf("GitHub信息: %s/%s\n", GitHubOwner, GitHubRepo)
 }
 
 func main() {

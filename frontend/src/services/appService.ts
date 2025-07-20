@@ -5,7 +5,9 @@ import {
     GetVersionInfo,
     UpdateVersionConfig,
     ForceReloadVersion,
-    GetVersionFromWails
+    GetVersionFromWails,
+    DebugVersionInfo,
+    GetCurrentVersionWithSource
   } from '../../wailsjs/go/main/App';
 
   export interface VersionInfo {
@@ -13,6 +15,15 @@ import {
     github_owner: string;
     github_repo: string;
     app_name: string;
+    source?: string;
+    is_default?: boolean;
+  }
+
+  export interface VersionWithSource {
+    version: string;
+    source: string;
+    is_default: boolean;
+    reliable: boolean;
   }
 
   export class AppService {
@@ -182,14 +193,16 @@ import {
       wailsVersion: string;
       isAvailable: boolean;
       isDevelopment: boolean;
+      debugInfo: any;
     }> {
       try {
-        const [currentVersion, versionInfo, wailsVersion, isAvailable, isDevelopment] = await Promise.all([
+        const [currentVersion, versionInfo, wailsVersion, isAvailable, isDevelopment, debugInfo] = await Promise.all([
           this.GetCurrentVersion(),
           this.GetVersionInfo(),
           this.GetVersionFromWails(),
           this.IsVersionAvailable(),
-          this.IsDevelopmentVersion()
+          this.IsDevelopmentVersion(),
+          this.GetDebugVersionInfo()
         ]);
 
         return {
@@ -197,11 +210,80 @@ import {
           versionInfo,
           wailsVersion,
           isAvailable,
-          isDevelopment
+          isDevelopment,
+          debugInfo
         };
       } catch (error) {
         console.error('Failed to get version debug info:', error);
         throw error;
+      }
+    }
+
+    /**
+     * 获取Go后端的版本调试信息
+     * @returns Promise<any> Go后端的调试信息
+     */
+    static async GetDebugVersionInfo(): Promise<any> {
+      try {
+        const debugInfo = await DebugVersionInfo();
+        return debugInfo;
+      } catch (error) {
+        console.error('Failed to get backend debug info:', error);
+        return {};
+      }
+    }
+
+    /**
+     * 获取当前版本及其来源信息
+     * @returns Promise<VersionWithSource> 版本和来源信息
+     */
+    static async GetCurrentVersionWithSource(): Promise<VersionWithSource> {
+      try {
+        const versionInfo = await GetCurrentVersionWithSource();
+        return {
+          version: versionInfo.version || 'unknown',
+          source: versionInfo.source || 'unknown',
+          is_default: versionInfo.is_default || false,
+          reliable: versionInfo.reliable || false
+        };
+      } catch (error) {
+        console.error('Failed to get version with source:', error);
+        return {
+          version: 'unknown',
+          source: 'error',
+          is_default: true,
+          reliable: false
+        };
+      }
+    }
+
+    /**
+     * 获取版本来源的中文描述
+     * @param source 版本来源
+     * @returns 中文描述
+     */
+    static getSourceDescription(source: string): string {
+      const descriptions: { [key: string]: string } = {
+        'compile_time': '编译时注入',
+        'wails_json': 'wails.json配置',
+        'version_json': 'version.json配置',
+        'default': '默认值',
+        'unknown': '未知',
+        'error': '获取失败'
+      };
+      return descriptions[source] || source;
+    }
+
+    /**
+     * 检查版本是否可信
+     * @returns Promise<boolean> 版本是否可信
+     */
+    static async IsVersionReliable(): Promise<boolean> {
+      try {
+        const versionInfo = await this.GetCurrentVersionWithSource();
+        return versionInfo.reliable;
+      } catch (error) {
+        return false;
       }
     }
   }

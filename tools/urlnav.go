@@ -173,11 +173,13 @@ func buildMode() error {
 	}
 
 	if version == "" {
-		version = "1.4.0" // 默认版本
+		version = "1.4.2" // 更新默认版本
 	}
 
 	// 构建带版本注入的ldflags
 	ldflags := fmt.Sprintf("-s -w -X main.Version=%s -X main.GitHubOwner=wangyaxings -X main.GitHubRepo=url-navigator", version)
+	writeInfo(fmt.Sprintf("使用版本: %s", version))
+	writeInfo(fmt.Sprintf("ldflags: %s", ldflags))
 	cmd = exec.Command("wails", "build", "-ldflags", ldflags)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -10,6 +10,8 @@ export function AdvancedSearchURLs(arg1:main.AdvancedSearchOptions):Promise<Arra
 
 export function CheckForUpdates():Promise<main.UpdateInfo>;
 
+export function DebugVersionInfo():Promise<Record<string, any>>;
+
 export function DeleteURL(arg1:string):Promise<void>;
 
 export function DownloadAndApplyUpdate(arg1:string):Promise<void>;
@@ -23,6 +25,8 @@ export function ForceReloadVersion():Promise<void>;
 export function GetCategories():Promise<Array<main.Category>>;
 
 export function GetCurrentVersion():Promise<string>;
+
+export function GetCurrentVersionWithSource():Promise<Record<string, any>>;
 
 export function GetDataDir():Promise<string>;
 

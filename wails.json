@@ -11,7 +11,7 @@
       "production",
       "-trimpath"
     ],
-    "ldflags": "-s -w -X main.Version=1.4.0 -X main.GitHubOwner=wangyaxings -X main.GitHubRepo=url-navigator"
+    "ldflags": "-s -w -X main.Version=1.4.2 -X main.GitHubOwner=wangyaxings -X main.GitHubRepo=url-navigator"
   },
   "buildSettings": {
     "embedVersionInfo": true,
