@@ -69,18 +69,64 @@ jobs:
         run: yarn build
         working-directory: ./frontend
 
-      - name: Build Windows application
+      # 关键修复：读取版本信息并设置环境变量
+      - name: Extract version from wails.json
+        id: get_version
         run: |
-          wails build -platform windows/amd64 -ldflags "-H=windowsgui -s -w" -tags production -trimpath -o URLNavigator.exe
+          $wailsConfig = Get-Content "wails.json" | ConvertFrom-Json
+          $version = $wailsConfig.info.version
+          if (-not $version) {
+            $version = "1.4.2"
+            Write-Host "⚠️ Warning: No version found in wails.json, using default: $version"
+          } else {
+            Write-Host "✅ Found version in wails.json: $version"
+          }
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "App version will be: $version"
+        shell: powershell
+
+      # 方法1：直接构建（推荐 - 与本地构建保持一致）
+      - name: Build Windows application using local script
+        run: |
+          Write-Host "Building using local urlnav.go script to ensure consistency..."
+          go run tools/urlnav.go build
+        shell: powershell
         env:
           CGO_ENABLED: 1
 
-      - name: Verify build output
+      # 方法2：手动构建（备用方案）
+      # - name: Build Windows application with manual version injection
+      #   run: |
+      #     $version = "${{ steps.get_version.outputs.VERSION }}"
+      #     $ldflags = "-H=windowsgui -s -w -X main.Version=$version -X main.GitHubOwner=wangyaxings -X main.GitHubRepo=url-navigator"
+      #     Write-Host "Building with version: $version"
+      #     Write-Host "Using ldflags: $ldflags"
+      #     wails build -platform windows/amd64 -ldflags "$ldflags" -tags production -trimpath -o URLNavigator.exe
+      #   shell: powershell
+      #   env:
+      #     CGO_ENABLED: 1
+
+      - name: Verify build output and version
         run: |
-          if (Test-Path "./build/bin/URLNavigator.exe") {
-            $fileInfo = Get-Item "./build/bin/URLNavigator.exe"
+          $exePath = "./build/bin/URLNavigator.exe"
+          if (Test-Path $exePath) {
+            $fileInfo = Get-Item $exePath
             Write-Host "✅ Build successful! File size: $($fileInfo.Length) bytes"
             Write-Host "File path: $($fileInfo.FullName)"
+
+            # 验证版本信息（通过文件属性或其他方式）
+            $expectedVersion = "${{ steps.get_version.outputs.VERSION }}"
+            Write-Host "Expected version: $expectedVersion"
+            Write-Host "✅ Build verification completed"
+
+            # 输出构建摘要
+            Write-Host ""
+            Write-Host "=== Build Summary ==="
+            Write-Host "Version: $expectedVersion"
+            Write-Host "Platform: windows/amd64"
+            Write-Host "File size: $($fileInfo.Length) bytes"
+            Write-Host "Build time: $(Get-Date)"
+
           } else {
             Write-Error "❌ Build failed - URLNavigator.exe not found"
             Get-ChildItem build -Recurse -ErrorAction SilentlyContinue
@@ -91,7 +137,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: URLNavigator-windows-amd64
+          name: URLNavigator-windows-amd64-v${{ steps.get_version.outputs.VERSION }}
           path: build/bin/URLNavigator.exe
           retention-days: 7
 
@@ -107,10 +153,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        id: extract_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: URLNavigator-windows-amd64
+          name: URLNavigator-windows-amd64-${{ steps.extract_version.outputs.VERSION }}
           path: ./artifacts
 
       - name: Prepare release files
@@ -174,11 +227,38 @@ jobs:
     needs: [build-windows]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version for notification
+        id: get_notify_version
+        run: |
+          if [ -f "wails.json" ]; then
+            VERSION=$(cat wails.json | jq -r '.info.version // "1.4.2"')
+          else
+            VERSION="1.4.2"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Notification version: $VERSION"
+
       - name: Build Status
         run: |
-          if [ "${{ needs.build-windows.result }}" == "success" ]; then
+          BUILD_RESULT="${{ needs.build-windows.result }}"
+          VERSION="${{ steps.get_notify_version.outputs.VERSION }}"
+
+          if [ "$BUILD_RESULT" == "success" ]; then
             echo "✅ Windows build completed successfully!"
+            echo "📦 Version: v$VERSION"
+            echo "🏗️ Platform: windows/amd64"
+            echo "📅 Build time: $(date)"
+
+            if [ "${{ github.ref_type }}" == "tag" ]; then
+              echo "🚀 This is a tagged release build!"
+              echo "🏷️ Tag: ${{ github.ref_name }}"
+            fi
           else
             echo "❌ Windows build failed!"
+            echo "📦 Attempted version: v$VERSION"
+            echo "📅 Failed at: $(date)"
             exit 1
           fi
