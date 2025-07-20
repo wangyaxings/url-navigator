@@ -204,7 +204,7 @@ func runApp() error {
 }
 
 // 简化版发布功能
-func releaseMode(version string, skipBuild, skipRelease, force bool) error {
+func releaseMode(version string, skipBuild, skipRelease, force, debug bool) error {
 	writeHeader("📦 URL Navigator Release")
 
 	projectRoot, err := getProjectRoot()
@@ -230,6 +230,16 @@ func releaseMode(version string, skipBuild, skipRelease, force bool) error {
 	writeInfo(fmt.Sprintf("目标版本: %s", versionWithV))
 	writeInfo(fmt.Sprintf("跳过构建: %t", skipBuild))
 	writeInfo(fmt.Sprintf("跳过发布: %t", skipRelease))
+
+	if debug {
+		writeInfo("=== 调试模式已启用 ===")
+		// 显示当前Git状态
+		if cmd := exec.Command("git", "status", "--porcelain"); true {
+			if output, err := cmd.CombinedOutput(); err == nil {
+				writeInfo(fmt.Sprintf("Git状态输出:\n%s", string(output)))
+			}
+		}
+	}
 
 	// 检查Git状态
 	if !skipRelease {
@@ -286,33 +296,79 @@ func releaseMode(version string, skipBuild, skipRelease, force bool) error {
 		writeInfo("执行Git操作...")
 
 		// 添加修改的文件
-		if err := exec.Command("git", "add", "wails.json", "frontend/package.json").Run(); err != nil {
+		writeInfo("添加版本文件到Git...")
+		cmd := exec.Command("git", "add", "wails.json", "frontend/package.json")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			writeWarning(fmt.Sprintf("Git add 输出: %s", string(output)))
 			return fmt.Errorf("Git add 失败: %v", err)
 		}
 
-		// 提交更改
-		commitMessage := fmt.Sprintf("chore: bump version to %s", versionWithV)
-		if err := exec.Command("git", "commit", "-m", commitMessage).Run(); err != nil {
-			return fmt.Errorf("Git commit 失败: %v", err)
-		}
-		writeSuccess("版本更新已提交")
+		// 检查是否有文件需要提交
+		cmd = exec.Command("git", "diff", "--cached", "--quiet")
+		if err := cmd.Run(); err != nil {
+			// 有文件需要提交
+			writeInfo("检测到文件变更，执行提交...")
 
-		// 创建标签
-		tagMessage := fmt.Sprintf("Release %s", versionWithV)
-		if err := exec.Command("git", "tag", "-a", versionWithV, "-m", tagMessage).Run(); err != nil {
-			return fmt.Errorf("创建标签失败: %v", err)
+			// 提交更改
+			commitMessage := fmt.Sprintf("chore: bump version to %s", versionWithV)
+			cmd = exec.Command("git", "commit", "-m", commitMessage)
+			if output, err := cmd.CombinedOutput(); err != nil {
+				writeWarning(fmt.Sprintf("Git commit 输出: %s", string(output)))
+				writeWarning("Git commit 失败，但继续执行后续操作...")
+				// 不返回错误，继续执行
+			} else {
+				writeSuccess("版本更新已提交")
+			}
+		} else {
+			writeInfo("没有文件变更需要提交，跳过commit步骤")
 		}
-		writeSuccess(fmt.Sprintf("标签 %s 已创建", versionWithV))
+
+		// 创建标签（即使commit失败也要创建标签）
+		writeInfo("创建Git标签...")
+		tagMessage := fmt.Sprintf("Release %s", versionWithV)
+		cmd = exec.Command("git", "tag", "-a", versionWithV, "-m", tagMessage)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			// 检查是否是标签已存在的错误
+			if strings.Contains(string(output), "already exists") {
+				writeWarning(fmt.Sprintf("标签 %s 已存在，删除旧标签重新创建...", versionWithV))
+				// 删除旧标签
+				exec.Command("git", "tag", "-d", versionWithV).Run()
+				exec.Command("git", "push", "origin", ":refs/tags/"+versionWithV).Run()
+				// 重新创建标签
+				if err := exec.Command("git", "tag", "-a", versionWithV, "-m", tagMessage).Run(); err != nil {
+					writeWarning("重新创建标签失败，但继续执行...")
+				} else {
+					writeSuccess(fmt.Sprintf("标签 %s 已重新创建", versionWithV))
+				}
+			} else {
+				writeWarning(fmt.Sprintf("创建标签输出: %s", string(output)))
+				writeWarning("创建标签失败，但继续执行推送操作...")
+			}
+		} else {
+			writeSuccess(fmt.Sprintf("标签 %s 已创建", versionWithV))
+		}
 
 		// 推送代码和标签
 		writeInfo("推送到远程仓库...")
-		if err := exec.Command("git", "push", "origin", "HEAD").Run(); err != nil {
-			return fmt.Errorf("推送代码失败: %v", err)
+
+		// 推送代码
+		cmd = exec.Command("git", "push", "origin", "HEAD")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			writeWarning(fmt.Sprintf("推送代码输出: %s", string(output)))
+			writeWarning("推送代码失败，但继续尝试推送标签...")
+		} else {
+			writeSuccess("代码推送成功")
 		}
-		if err := exec.Command("git", "push", "origin", versionWithV).Run(); err != nil {
-			return fmt.Errorf("推送标签失败: %v", err)
+
+		// 推送标签
+		cmd = exec.Command("git", "push", "origin", versionWithV)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			writeWarning(fmt.Sprintf("推送标签输出: %s", string(output)))
+			writeWarning("推送标签失败，请手动推送标签:")
+			writeInfo(fmt.Sprintf("手动命令: git push origin %s", versionWithV))
+		} else {
+			writeSuccess("标签推送成功")
 		}
-		writeSuccess("推送完成")
 	}
 
 	writeSuccess("🚀 发布流程完成!")
@@ -385,6 +441,7 @@ func showHelp() {
 	fmt.Println("  -skip-build    跳过构建过程")
 	fmt.Println("  -skip-release  跳过发布过程")
 	fmt.Println("  -force         强制执行，跳过确认")
+	fmt.Println("  -debug         启用调试模式，显示详细信息")
 }
 
 func main() {
@@ -414,6 +471,7 @@ func main() {
 		skipBuild := false
 		skipRelease := false
 		force := false
+		debug := false
 
 		// 解析选项
 		for i := 3; i < len(os.Args); i++ {
@@ -424,10 +482,12 @@ func main() {
 				skipRelease = true
 			case "-force":
 				force = true
+			case "-debug":
+				debug = true
 			}
 		}
 
-		err = releaseMode(version, skipBuild, skipRelease, force)
+		err = releaseMode(version, skipBuild, skipRelease, force, debug)
 	case "help", "-h", "--help":
 		showHelp()
 		return
