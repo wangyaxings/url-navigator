@@ -1,38 +1,51 @@
-# Build and Release Guide
+# URL Navigator 构建指南
 
-## Quick Start
+本文档提供URL Navigator项目的构建、开发和发布指南。
 
-Use the automated PowerShell script for easy version management and release:
+## 系统要求
 
-```powershell
-# Release a new version (e.g., v1.3.0)
-.\release.ps1 v1.3.0
+- Go 1.20+
+- Node.js 16+
+- Yarn 包管理器
+- Wails v2.10+
+- Git（用于发布流程）
 
-# Build only, skip release
-.\release.ps1 v1.3.0 -SkipRelease
+## 开发工具
 
-# Release only (requires existing build)
-.\release.ps1 v1.3.0 -SkipBuild
+项目现在使用统一的Go工具来处理所有开发、构建和发布任务：
 
-# Force execution without confirmation
-.\release.ps1 v1.3.0 -Force
+```bash
+# 查看帮助
+go run tools/urlnav.go help
+
+# 开发模式 (热重载)
+go run tools/urlnav.go dev
+
+# 构建应用
+go run tools/urlnav.go build
+
+# 运行应用
+go run tools/urlnav.go run
+
+# 发布新版本
+go run tools/urlnav.go release v1.4.0
 ```
 
-## Version Format
+## 版本格式
 
-- **Primary format**: `vX.Y.Z` (e.g., `v1.3.0`)
-- **Alternative**: `X.Y.Z` (script will add `v` prefix automatically)
-- Examples: `v1.3.0`, `v2.0.1`, `v1.2.10`
+- **主要格式**: `vX.Y.Z` (例如: `v1.3.0`)
+- **备选格式**: `X.Y.Z` (工具会自动添加`v`前缀)
+- 示例: `v1.3.0`, `v2.0.1`, `v1.2.10`
 
-## Configuration Management
+## 配置管理
 
-All configuration is managed through `version.json` **as a stable template**:
+所有配置通过`version.json`作为**稳定模板**管理：
 
-> **Important**: `version.json` serves as a configuration template and is **NOT modified** during releases. Version numbers are managed through script parameters and applied to `wails.json` and `frontend/package.json` only.
+> **重要**: `version.json`作为配置模板，在发布过程中**不会被修改**。版本号通过工具参数管理，只应用到`wails.json`和`frontend/package.json`。
 
 ```json
 {
-  "version": "1.2.1",  // ⚠️ Template version - NOT updated by script
+  "version": "1.2.1",  // ⚠️ 模板版本 - 不会被脚本更新
   "github": {
     "owner": "wangyaxings",
     "repo": "url-navigator"
@@ -40,7 +53,7 @@ All configuration is managed through `version.json` **as a stable template**:
   "app": {
     "name": "URLNavigator",
     "display_name": "URL Navigator",
-    "description": "A beautiful URL bookmark manager"
+    "description": "A beautiful URL bookmark manager with auto-update functionality"
   },
   "build": {
     "platform": "windows/amd64",
@@ -51,252 +64,202 @@ All configuration is managed through `version.json` **as a stable template**:
     "create_github_release": true,
     "auto_open_browser": true,
     "commit_message_template": "chore: bump version to {version}",
-    "tag_message_template": "Release {version}..."
+    "tag_message_template": "Release {version}"
   }
 }
 ```
 
-### Design Philosophy
+## 开发流程
 
-- **`version.json`**: Stable configuration template (unchanged by releases)
-- **`wails.json`**: Updated with new version during release
-- **`frontend/package.json`**: Updated with new version during release
-- **Script parameters**: Source of truth for version numbers
+### 开发模式
 
-## What the Script Does
+启动带热重载的开发服务器：
 
-1. **Environment Check**: Verifies PowerShell 5.1+, Git, Go, Wails, and Yarn
-2. **Configuration Loading**: Loads settings from `version.json` (template only)
-3. **Version Detection**: Reads current version from `wails.json` or `package.json`
-4. **Version Validation**: Ensures proper version format from script parameters
-5. **Repository Validation**: Ensures clean working directory
-6. **Auto-Detection**: Automatically detects GitHub repository from git remote
-7. **Selective Updates**: Updates `wails.json` and `frontend/package.json` only
-8. **Build Process**: Compiles frontend and Windows executable with injected version info
-9. **Git Operations**: Commits selective changes, creates tags and pushes to repository
-10. **GitHub Integration**: Triggers automated GitHub Actions build
-
-### Key Design Benefits
-
-- ✅ **Stable Configuration**: `version.json` never changes during releases
-- ✅ **Clean Commits**: Only essential files are modified per release
-- ✅ **Parameter-Driven**: Version numbers come from command line, not files
-- ✅ **Template Approach**: Configuration stays consistent across releases
-
-## Prerequisites
-
-- **PowerShell 5.1+** (Windows PowerShell or PowerShell Core)
-- **Git** (for version control)
-- **Go 1.21+** (for backend)
-- **Wails CLI v2.10+** (`go install github.com/wailsapp/wails/v2/cmd/wails@latest`)
-- **Node.js 18+ and Yarn** (for frontend)
-- **Clean Git working directory** (no uncommitted changes)
-
-## Command-Line Options
-
-```powershell
-# Basic usage
-.\release.ps1 <version>
-
-# Available switches
--SkipBuild      # Skip the build process
--SkipRelease    # Skip the release process
--Force          # Skip confirmation prompts
-
-# Examples
-.\release.ps1 v1.3.0
-.\release.ps1 1.3.0 -SkipBuild
-.\release.ps1 v1.3.0 -Force
-.\release.ps1 v1.3.0 -SkipBuild -SkipRelease  # Only update configs
+```bash
+go run tools/urlnav.go dev
 ```
 
-## Manual Build (Development)
+这将：
+- 自动安装前端依赖
+- 启动Wails开发服务器
+- 提供热重载功能
+- 按Ctrl+C停止
 
-```powershell
-# Development mode
-wails dev
+### 构建应用
 
-# Build manually
-Set-Location frontend
-yarn install
-yarn build
-Set-Location ..
-wails build
+构建生产版本：
+
+```bash
+go run tools/urlnav.go build
 ```
 
-## Automated Release Process
+这将：
+- 安装/更新前端依赖
+- 构建前端静态文件
+- 编译Wails应用
+- 生成`build/bin/URLNavigator.exe`
 
-When you run `.\release.ps1 v1.3.0`:
+### 运行应用
 
-1. **Validation**: Checks environment and version format from parameter
-2. **Configuration**: Loads settings from `version.json` (template only)
-3. **Version Detection**: Reads current version from existing project files
-4. **Auto-Detection**: Detects GitHub repository from git remote
-5. **Selective Updates**: Modifies `wails.json` and `frontend/package.json` only
-6. **Build**: Compiles application with version injection
-7. **Git Operations**: Commits selective changes, tags, and pushes
-8. **GitHub Actions**: Automatically triggered for release creation
+运行构建的应用：
 
-### Version Management Flow
-
-```
-Script Parameter (v1.3.0) → wails.json + package.json → Git Commit
-                          ↗                           ↘
-           version.json (template)                    GitHub Release
-           [UNCHANGED]                                [AUTOMATED]
+```bash
+go run tools/urlnav.go run
 ```
 
-## Error Handling and Recovery
+如果应用未构建，会自动先执行构建。
 
-The PowerShell script includes comprehensive error handling:
+## 发布流程
 
-- **Automatic Backups**: Creates `.backup` files before modifications
-- **Rollback Support**: Detailed error messages for troubleshooting
-- **Environment Validation**: Checks all prerequisites before execution
-- **Git Safety**: Validates clean working directory
-- **Build Verification**: Confirms successful compilation
+### 版本发布
 
-## Configuration Customization
+发布新版本的完整流程：
 
-### GitHub Repository
+```bash
+# 完整发布流程
+go run tools/urlnav.go release v1.4.0
 
-The script auto-detects your repository from `git remote origin`, but you can set defaults in `version.json`:
+# 只构建，不推送到Git
+go run tools/urlnav.go release v1.4.0 -skip-release
 
-```json
-{
-  "github": {
-    "owner": "your-username",
-    "repo": "your-repo-name"
-  }
-}
+# 只推送，不重新构建
+go run tools/urlnav.go release v1.4.0 -skip-build
+
+# 强制执行，跳过确认
+go run tools/urlnav.go release v1.4.0 -force
 ```
 
-> **Note**: These values are used as fallbacks. Auto-detection from git remote takes priority.
+### 发布选项
 
-### Build Settings
+- `-skip-build`: 跳过构建过程
+- `-skip-release`: 跳过Git操作（提交、标签、推送）
+- `-force`: 强制执行，跳过所有确认
 
-Customize build flags and target platform:
+### 发布检查列表
 
-```json
-{
-  "build": {
-    "platform": "windows/amd64",
-    "flags": ["-tags", "production", "-trimpath"],
-    "ldflags": ["-H=windowsgui", "-s", "-w"]
-  }
-}
+发布工具会自动执行以下检查：
+
+1. ✅ **版本格式验证**: 确保版本号格式正确
+2. ✅ **Git状态检查**: 确保工作目录干净
+3. ✅ **依赖检查**: 验证所需工具可用
+4. ✅ **版本文件更新**: 同步更新配置文件
+5. ✅ **构建验证**: 确保应用构建成功
+6. ✅ **Git操作**: 提交、标签、推送
+
+### 版本管理逻辑
+
+发布工具按以下优先级管理版本：
+
+1. **wails.json** - 实际版本源（动态更新）
+2. **frontend/package.json** - 前端版本（同步更新）
+3. **version.json** - 配置模板（保持不变）
+
+## 文件结构
+
+### 关键文件
+
+- `tools/urlnav.go` - 统一开发和发布工具
+- `main.go` - 应用程序入口点
+- `app.go` - 主要应用逻辑和Wails绑定
+- `version.go` - 版本管理逻辑
+- `wails.json` - Wails配置和当前版本
+- `version.json` - 发布配置模板
+
+### 前端结构
+
+- `frontend/src/components/` - React组件
+- `frontend/src/services/` - 服务层
+- `frontend/src/types/` - TypeScript类型定义
+- `frontend/wailsjs/` - 自动生成的Go绑定
+
+## 故障排除
+
+### 常见问题
+
+1. **前端构建失败**
+   ```bash
+   cd frontend
+   yarn install
+   yarn build
+   ```
+
+2. **Wails绑定问题**
+   ```bash
+   wails generate module
+   ```
+
+3. **Git推送失败**
+   - 检查网络连接
+   - 验证远程仓库权限
+   - 使用`-skip-release`选项进行本地构建
+
+### 环境验证
+
+运行以下命令验证环境：
+
+```bash
+# 检查Go
+go version
+
+# 检查Node.js和Yarn
+node --version
+yarn --version
+
+# 检查Wails
+wails version
+
+# 检查Git
+git --version
 ```
 
-### Release Behavior
+## 部署
 
-Control release automation:
+### GitHub Actions
 
-```json
-{
-  "release": {
-    "create_github_release": true,
-    "auto_open_browser": false,
-    "commit_message_template": "feat: release {version}",
-    "tag_message_template": "Custom release message..."
-  }
-}
-```
+项目配置了GitHub Actions自动化：
 
-## Monitoring and Links
+1. **推送标签**触发构建
+2. **自动创建Release**
+3. **上传构建产物**
+4. **触发应用内更新**
 
-After running the script:
-- **Build Status**: https://github.com/wangyaxings/url-navigator/actions
-- **Releases**: https://github.com/wangyaxings/url-navigator/releases
+### 手动部署
 
-## Troubleshooting
+如果需要手动部署：
 
-### PowerShell Execution Policy
+1. 运行完整发布流程
+2. 检查GitHub Actions状态
+3. 验证Release创建
+4. 测试应用内更新
 
-If you get execution policy errors:
-```powershell
-# Check current policy
-Get-ExecutionPolicy
+## 最佳实践
 
-# Allow local scripts (run as Administrator)
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope LocalMachine
+1. **开发时**使用`go run tools/urlnav.go dev`
+2. **测试前**使用`go run tools/urlnav.go build`验证构建
+3. **发布前**确保所有更改已提交
+4. **使用语义化版本**号（v1.2.3）
+5. **测试版本**使用`-skip-release`选项
 
-# Or run with bypass for single execution
-powershell -ExecutionPolicy Bypass -File .\release.ps1 v1.3.0
-```
+---
 
-### Script Fails with "Tool not found"
-- Install missing tools (Git, Go, Wails, Yarn)
-- Ensure tools are in your system PATH
-- Restart PowerShell after PATH changes
+## 新功能亮点
 
-### "Working directory has uncommitted changes"
-```powershell
-# Commit or stash your changes
-git add .
-git commit -m "your message"
-# or
-git stash
-```
+### 🚀 统一的Go工具
 
-### Build Fails
-```powershell
-# Check dependencies
-Set-Location frontend
-yarn install
-Set-Location ..
+- 替换了所有批处理文件和PowerShell脚本
+- 提供一致的跨平台体验
+- 彩色输出和清晰的进度指示
 
-# Verify Wails setup
-wails doctor
+### 🔧 改进的版本管理
 
-# Check Go modules
-go mod tidy
-```
+- 自动版本注入到构建中
+- 保持配置模板稳定性
+- 智能的版本读取优先级
 
-### GitHub Push Fails
-- Verify Git remote configuration: `git remote -v`
-- Check if you have push permissions to the repository
-- Ensure GitHub authentication is configured
+### 📦 简化的发布流程
 
-## Version Management Strategy
+- 一键式发布命令
+- 内置安全检查
+- 灵活的跳过选项
 
-The application uses a **template-based configuration** approach:
-
-### Version Sources
-- **Script Parameters**: Source of truth for new releases (e.g., `v1.3.0`)
-- **`wails.json`**: Updated during releases, used by application
-- **`frontend/package.json`**: Updated during releases, used by build system
-- **`version.json`**: Configuration template (**never modified by script**)
-
-### Version Display
-- Frontend components show version with `v` prefix (e.g., `v1.3.0`)
-- Configuration files store version without `v` prefix for compatibility
-- Auto-update system handles both formats correctly
-
-### Benefits
-- **Clean Git History**: Only essential files change per release
-- **Stable Configuration**: Template settings never drift
-- **Parameter-Driven**: Version control through command line
-- **Predictable Behavior**: No configuration file churn
-
-## Development Workflow
-
-1. **Make Changes**: Develop your features
-2. **Test Locally**: `wails dev` for testing
-3. **Commit Changes**: `git add . && git commit -m "feat: your feature"`
-4. **Run Release**: `.\release.ps1 vX.Y.Z`
-5. **Monitor Build**: Check GitHub Actions for automated build and release
-
-## Migration from Batch Script
-
-If migrating from `release.bat`:
-
-1. **Keep both scripts** during transition period
-2. **Test PowerShell script** with `-SkipRelease` first
-3. **Verify configuration** in `version.json`
-4. **Remove old script** after successful validation
-
-The PowerShell script provides better:
-- Error handling and recovery
-- Configuration management
-- Cross-platform compatibility (Windows PowerShell / PowerShell Core)
-- Debugging and verbose output
+如有问题，请参考[GitHub仓库](https://github.com/wangyaxings/url-navigator)或提交Issue。
