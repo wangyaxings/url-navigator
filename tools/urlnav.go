@@ -159,7 +159,26 @@ func buildMode() error {
 
 	// 构建Wails应用
 	writeInfo("构建Wails应用...")
-	cmd = exec.Command("wails", "build")
+	// 从wails.json读取版本号并构建ldflags
+	version := ""
+	if data, err := os.ReadFile("wails.json"); err == nil {
+		var config struct {
+			Info struct {
+				Version string `json:"version"`
+			} `json:"info"`
+		}
+		if json.Unmarshal(data, &config) == nil {
+			version = config.Info.Version
+		}
+	}
+
+	if version == "" {
+		version = "1.4.0" // 默认版本
+	}
+
+	// 构建带版本注入的ldflags
+	ldflags := fmt.Sprintf("-s -w -X main.Version=%s -X main.GitHubOwner=wangyaxings -X main.GitHubRepo=url-navigator", version)
+	cmd = exec.Command("wails", "build", "-ldflags", ldflags)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
