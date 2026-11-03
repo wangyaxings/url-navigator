@@ -320,3 +320,85 @@ func TestExpiredAuthorizationStillShowsEnrollmentRecoveryCodes(t *testing.T) {
 		t.Fatal("expired authorization lost first-enrollment recovery codes")
 	}
 }
+
+func TestFormPagesPreserveOriginAndRejectNullOrigin(t *testing.T) {
+	a, h := testApp(t)
+	sid, _, codes := enroll(t, a.store)
+	sess, _ := a.store.session(sid)
+	p, _ := a.store.newPending("")
+	for _, test := range []struct {
+		path, csrf, code string
+		cookie           *http.Cookie
+	}{
+		{"/mfa", p.CSRF, codes[0], &http.Cookie{Name: pendingCookie, Value: p.ID}},
+		{"/logout", sess.CSRF, "", &http.Cookie{Name: sessionCookie, Value: sid}},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			page := request(h, "GET", test.path, nil, test.cookie)
+			// Fetch's append-Origin algorithm maps a no-referrer form POST to
+			// Origin:null. Same-origin retains the Origin needed by strict CSRF.
+			if page.Header().Get("Referrer-Policy") != "same-origin" {
+				t.Fatal("form policy suppresses its required same-origin Origin")
+			}
+			form := url.Values{"csrf": {test.csrf}, "code": {test.code}}
+			for _, origin := range []string{"null", "", "https://evil.test"} {
+				r := httptest.NewRequest("POST", issuer+test.path, strings.NewReader(form.Encode()))
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				r.Header.Set("Origin", origin)
+				r.AddCookie(test.cookie)
+				w := httptest.NewRecorder()
+				h.ServeHTTP(w, r)
+				if w.Code != 403 {
+					t.Fatalf("untrusted Origin %q accepted: %d", origin, w.Code)
+				}
+			}
+			w := request(h, "POST", test.path, form, test.cookie)
+			if w.Code != 200 && w.Code != 303 {
+				t.Fatalf("same-origin form rejected: %d", w.Code)
+			}
+		})
+	}
+}
+
+func TestMFAFormPolicyAllowsOnlyRegisteredClientRedirectOrigins(t *testing.T) {
+	for _, client := range []string{"pansou", "quota"} {
+		t.Run(client, func(t *testing.T) {
+			a, h := testApp(t)
+			_, _, codes := enroll(t, a.store)
+			q := url.Values{"client_id": {client}, "redirect_uri": {a.store.clients[client].Redirect}, "response_type": {"code"}, "scope": {"openid email profile"}, "state": {"state"}, "nonce": {"nonce"}, "code_challenge": {oauth2.S256ChallengeFromVerifier(oauth2.GenerateVerifier())}, "code_challenge_method": {"S256"}}
+			w := request(h, "GET", "/authorize?"+q.Encode(), nil)
+			u, _ := url.Parse(w.Header().Get("Location"))
+			p, err := a.store.newPending(u.Query().Get("request"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pc := &http.Cookie{Name: pendingCookie, Value: p.ID}
+			page := request(h, "GET", "/mfa", nil, pc)
+			allowed := map[string]bool{}
+			for _, directive := range strings.Split(page.Header().Get("Content-Security-Policy"), ";") {
+				fields := strings.Fields(directive)
+				if len(fields) > 0 && fields[0] == "form-action" {
+					for _, source := range fields[1:] {
+						allowed[source] = true
+					}
+				}
+			}
+			if len(allowed) != 3 || !allowed["'self'"] || !allowed["https://pan.jomon.dev"] || !allowed["https://quota.jomon.dev"] {
+				t.Fatalf("form navigation policy must allow exactly self and registered clients: %v", allowed)
+			}
+			w = request(h, "POST", "/mfa", url.Values{"csrf": {p.CSRF}, "code": {codes[0]}}, pc)
+			if w.Code != 303 {
+				t.Fatalf("MFA did not start navigation: %d", w.Code)
+			}
+			u, _ = url.Parse(w.Header().Get("Location"))
+			if u.Scheme+"://"+u.Host != issuer {
+				t.Fatal("first MFA redirect left portal")
+			}
+			w = request(h, "GET", u.RequestURI(), nil, cookie(w, sessionCookie))
+			u, _ = url.Parse(w.Header().Get("Location"))
+			if u.Query().Get("code") == "" || !allowed[u.Scheme+"://"+u.Host] {
+				t.Fatal("MFA redirect chain blocked by form policy", u)
+			}
+		})
+	}
+}

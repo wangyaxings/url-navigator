@@ -73,10 +73,14 @@ func newApp(s *Store, master [32]byte, g upstream, cards []Card) (*App, http.Han
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Pragma", "no-cache")
-		w.Header().Set("Referrer-Policy", "no-referrer")
+		// Native form POSTs need their same-origin Origin for the strict CSRF
+		// check; no-referrer would make browsers serialize it as null.
+		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+		// The MFA form's 303 -> OIDC callback -> client callback chain is a
+		// form navigation. Permit only the two fixed registered client origins.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self' https://pan.jomon.dev https://quota.jomon.dev; base-uri 'none'; frame-ancestors 'none'")
 		if r.Host != "nav.jomon.dev" {
 			http.Error(w, "Not found", 404)
 			return
