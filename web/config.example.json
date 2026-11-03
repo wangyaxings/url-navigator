@@ -1,0 +1,25 @@
+{
+  "listen": "127.0.0.1:8087",
+  "database": "/var/lib/nav/portal.db",
+  "owner_email_file": "/run/secrets/nav_owner_email",
+  "google_client_id": "REPLACE_WITH_GOOGLE_WEB_CLIENT_ID",
+  "google_client_secret_file": "/run/secrets/nav_google_client_secret",
+  "master_key_file": "/run/secrets/nav_master_key",
+  "provider_key_file": "/run/secrets/nav_signing_key.pem",
+  "clients": [
+    {
+      "id": "pansou",
+      "secret_file": "/run/secrets/nav_pansou_secret",
+      "redirect_uri": "https://pan.jomon.dev/auth/sso/callback"
+    },
+    {
+      "id": "quota",
+      "secret_file": "/run/secrets/nav_quota_secret",
+      "redirect_uri": "https://quota.jomon.dev/auth/sso/callback"
+    }
+  ],
+  "cards": [
+    { "name": "PanSou", "url": "https://pan.jomon.dev" },
+    { "name": "Quota", "url": "https://quota.jomon.dev" }
+  ]
+}

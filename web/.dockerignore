@@ -1,0 +1,7 @@
+*.db*
+*.pem
+*.key
+*.exe
+config.json
+secrets/
+*_test.go

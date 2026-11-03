@@ -1,0 +1,25 @@
+name: jomon-nav
+services:
+  portal:
+    image: ${NAV_IMAGE:?Set a verified immutable release image}
+    user: "65532:65532"
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.75
+    environment:
+      GOMEMLIMIT: 160MiB
+      GOMAXPROCS: "2"
+    volumes:
+      - ./state:/var/lib/nav
+      - ./secrets:/run/secrets:ro
+      - ./config.json:/etc/nav/config.json:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
