@@ -58,7 +58,7 @@ func enroll(t *testing.T, s *Store) (string, string, []string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sess, codes, err := s.finishMFA(p.ID, code)
+	sess, codes, err := s.finishMFA(p.ID, code, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestMFAEncryptionReplayRecoveryConcurrency(t *testing.T) {
 	}
 	p, _ := s.newPending("")
 	code, _ := totp.GenerateCode(seed, time.Now())
-	if _, _, err := s.finishMFA(p.ID, code); err == nil {
+	if _, _, err := s.finishMFA(p.ID, code, ""); err == nil {
 		t.Fatal("TOTP replay accepted")
 	}
 	var wins atomic.Int32
@@ -92,7 +92,7 @@ func TestMFAEncryptionReplayRecoveryConcurrency(t *testing.T) {
 			if e != nil {
 				return
 			}
-			if _, _, e = s.finishMFA(p.ID, codes[0]); e == nil {
+			if _, _, e = s.finishMFA(p.ID, codes[0], ""); e == nil {
 				wins.Add(1)
 			}
 		}()
@@ -141,7 +141,7 @@ func enrollRecovery(t *testing.T, s *Store) (string, string, []string) {
 	p, _ := s.newPending("")
 	var recovery string
 	s.update(func(d *diskState) error { recovery = randomToken(); d.Recovery[hash(recovery)] = true; return nil })
-	sess, codes, err := s.finishMFA(p.ID, recovery)
+	sess, codes, err := s.finishMFA(p.ID, recovery, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,12 +220,12 @@ func TestMFAFailuresLockAcrossNewPendingSessions(t *testing.T) {
 	_, _, codes := enroll(t, s)
 	for range 5 {
 		p, _ := s.newPending("")
-		if _, _, err := s.finishMFA(p.ID, "incorrect"); err == nil {
+		if _, _, err := s.finishMFA(p.ID, "incorrect", ""); err == nil {
 			t.Fatal("bad MFA accepted")
 		}
 	}
 	p, _ := s.newPending("")
-	if _, _, err := s.finishMFA(p.ID, codes[0]); err == nil {
+	if _, _, err := s.finishMFA(p.ID, codes[0], ""); err == nil {
 		t.Fatal("new pending session bypassed lock")
 	}
 }
@@ -258,7 +258,7 @@ func TestOwnerMFAAndSessionSurviveDatabaseReopen(t *testing.T) {
 	if seed, err := s.enrollment(p.ID); err != nil || seed != "" {
 		t.Fatal("MFA enrollment reset")
 	}
-	if _, _, err = s.finishMFA(p.ID, codes[0]); err != nil {
+	if _, _, err = s.finishMFA(p.ID, codes[0], ""); err != nil {
 		t.Fatal("recovery not persisted", err)
 	}
 }

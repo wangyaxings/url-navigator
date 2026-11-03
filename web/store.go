@@ -57,6 +57,7 @@ type diskState struct {
 	Owner      Owner
 	Recovery   map[string]bool
 	Sessions   map[string]*Session
+	Retired    map[string]time.Time
 	Pending    map[string]*Pending
 	Handshakes map[string]*Handshake
 	Auth       map[string]*AuthRequest
@@ -127,6 +128,9 @@ func (s *Store) update(fn func(*diskState) error) error {
 	if d.Sessions == nil {
 		d.Sessions = map[string]*Session{}
 	}
+	if d.Retired == nil {
+		d.Retired = map[string]time.Time{}
+	}
 	if d.Pending == nil {
 		d.Pending = map[string]*Pending{}
 	}
@@ -140,6 +144,11 @@ func (s *Store) update(fn func(*diskState) error) error {
 		d.Tokens = map[string]*Token{}
 	}
 	now := time.Now()
+	for id, expires := range d.Retired {
+		if !now.Before(expires) {
+			delete(d.Retired, id)
+		}
+	}
 	for k, v := range d.Pending {
 		if !now.Before(v.Expires) {
 			delete(d.Pending, k)
@@ -285,7 +294,7 @@ func (s *Store) session(id string) (*Session, error) {
 	return &out, err
 }
 
-func (s *Store) finishMFA(id, input string) (*Session, []string, error) {
+func (s *Store) finishMFA(id, input, replacedID string) (*Session, []string, error) {
 	var result *Session
 	var codes []string
 	denied := false
@@ -293,6 +302,12 @@ func (s *Store) finishMFA(id, input string) (*Session, []string, error) {
 		p := d.Pending[id]
 		now := time.Now()
 		if p == nil || now.Before(d.Owner.LockedUntil) {
+			return errDenied
+		}
+		// Two simultaneous requests carrying the same previous browser cookie
+		// must not create unrelated replacement parents. A marker is retained
+		// only until that cookie's original absolute expiry.
+		if _, retired := d.Retired[hash(replacedID)]; replacedID != "" && retired {
 			return errDenied
 		}
 		seed := d.Owner.Seed
@@ -343,6 +358,7 @@ func (s *Store) finishMFA(id, input string) (*Session, []string, error) {
 		}
 		d.Owner.Failures = 0
 		d.Owner.LockedUntil = time.Time{}
+		retireSession(d, replacedID)
 		result = &Session{ID: randomToken(), CSRF: randomToken(), AuthTime: now, LastSeen: now, Expires: now.Add(12 * time.Hour)}
 		d.Sessions[result.ID] = result
 		delete(d.Pending, id)
@@ -358,19 +374,30 @@ func (s *Store) finishMFA(id, input string) (*Session, []string, error) {
 }
 func (s *Store) logout(id string) error {
 	return s.update(func(d *diskState) error {
-		delete(d.Sessions, id)
-		for k, v := range d.Tokens {
-			if v.SessionID == id {
-				delete(d.Tokens, k)
-			}
-		}
-		for k, v := range d.Auth {
-			if v.SessionID == id {
-				delete(d.Auth, k)
-			}
-		}
+		retireSession(d, id)
 		return nil
 	})
+}
+
+// Called only within update's transaction, alongside replacement or logout.
+func retireSession(d *diskState, id string) {
+	if id == "" {
+		return
+	}
+	if v := d.Sessions[id]; v != nil {
+		d.Retired[hash(id)] = v.Expires
+	}
+	delete(d.Sessions, id)
+	for k, v := range d.Tokens {
+		if v.SessionID == id {
+			delete(d.Tokens, k)
+		}
+	}
+	for k, v := range d.Auth {
+		if v.SessionID == id {
+			delete(d.Auth, k)
+		}
+	}
 }
 func (s *Store) newHandshake(authID string) (*Handshake, error) {
 	h := &Handshake{ID: randomToken(), State: randomToken(), Nonce: randomToken(), Verifier: randomToken(), AuthID: authID, Expires: time.Now().Add(5 * time.Minute)}

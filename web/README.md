@@ -47,9 +47,13 @@ Preserve the portal's `Referrer-Policy: same-origin` header, including at nginx.
 
 `GET /healthz` requires the same Host header. Discovery at `/.well-known/openid-configuration` advertises `/authorize`, `/oauth/token`, `/oauth/introspect`, `/keys`, and `/logout`. Downstream clients must use discovery, client_secret_basic, code + PKCE S256, state and nonce. The only registered clients/callbacks are `pansou` / `https://pan.jomon.dev/auth/sso/callback` and `quota` / `https://quota.jomon.dev/auth/sso/callback`. Only `openid email profile` scopes and the authorization-code grant are allowed. No refresh tokens or JWT/client-credentials grant.
 
+The token, introspection, and revocation endpoints accept only POST with an `application/x-www-form-urlencoded` body and Basic client authentication. URL queries, form-body client secrets/assertions, and duplicate form parameters are rejected before provider dispatch. Tokens, secrets, grant parameters and PKCE verifiers must never be sent in the URL. Discovery also advertises the revocation endpoint `/revoke`.
+
 RS256 ID tokens include `sub`, verified `email`, `sid`, `auth_time`, `nonce`, `aud`, and `acr=urn:jomon:acr:google-totp`. The public `sid` is derived from the private session credential and cannot be replayed as the portal cookie. Introspection requires the registered client's Basic credentials and only reveals that client's own token; its active response includes `sub`, `client_id`, `aud` (array), `exp`, `sid`, `acr`, `auth_time`. Each app must introspect every protected request without a positive cache. Browser sessions expire absolutely after 12 hours and after one hour idle. Introspection updates idle activity but never the absolute deadline. ID tokens last five minutes; requests within six minutes of absolute expiry require fresh Google + MFA login. Access tokens expire with their parent and become inactive immediately on logout.
 
 Application logout should redirect to `https://nav.jomon.dev/logout`; GET only displays confirmation. The page posts a session-bound CSRF token with a matching Origin to revoke the parent and linked tokens atomically. No GET route revokes a session.
+
+Successful MFA with an existing browser session replaces that parent and atomically retires its tokens and authorization requests, so earlier app sessions cannot outlive the browser's new login. Failed MFA leaves the previous parent intact. Hashed retirement markers last only until the previous parent's absolute expiry and prevent concurrent replacement requests carrying the same old cookie from creating separate parents; a stale concurrent submission must retry using the browser's current cookie.
 
 ## Verification and preservation
 

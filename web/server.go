@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"html/template"
 	"image/png"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -45,11 +47,19 @@ func newApp(s *Store, master [32]byte, g upstream, cards []Card) (*App, http.Han
 		return nil, nil, err
 	}
 	a := &App{store: s, google: g, cards: cards, callback: op.AuthCallbackURL(provider)}
+	protectedEndpoints := map[string]bool{
+		provider.TokenEndpoint().Relative():         true,
+		provider.IntrospectionEndpoint().Relative(): true,
+		provider.RevocationEndpoint().Relative():    true,
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			a.home(w, r)
 		} else {
+			if protectedEndpoints[r.URL.Path] && !providerTransport(w, r) {
+				return
+			}
 			provider.ServeHTTP(w, r)
 		}
 	})
@@ -236,7 +246,7 @@ func (a *App) mfa(w http.ResponseWriter, r *http.Request) {
 		failure(w, 403)
 		return
 	}
-	v, codes, err := a.store.finishMFA(p.ID, strings.TrimSpace(r.FormValue("code")))
+	v, codes, err := a.store.finishMFA(p.ID, strings.TrimSpace(r.FormValue("code")), cookieValue(r, sessionCookie))
 	if err != nil {
 		render(w, 401, pageData{Title: "安全验证", View: "mfa", CSRF: p.CSRF, Error: "验证失败，请检查后重试；多次失败后请等待五分钟。"})
 		return
@@ -254,6 +264,46 @@ func (a *App) mfa(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, next, 303)
+}
+
+// Zitadel decodes merged r.Form and does not enforce HTTP methods here. Keep
+// credentials in Basic auth and grant/token inputs exclusively in the POST body.
+func providerTransport(w http.ResponseWriter, r *http.Request) bool {
+	reject := func(status int, code string) bool {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": code})
+		return false
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		return reject(http.StatusMethodNotAllowed, "invalid_request")
+	}
+	if r.URL.RawQuery != "" || r.URL.ForceQuery {
+		return reject(http.StatusBadRequest, "invalid_request")
+	}
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/x-www-form-urlencoded" {
+		return reject(http.StatusUnsupportedMediaType, "invalid_request")
+	}
+	if err := r.ParseForm(); err != nil {
+		return reject(http.StatusBadRequest, "invalid_request")
+	}
+	for key, values := range r.PostForm {
+		switch strings.ToLower(key) {
+		case "client_secret", "client_assertion", "client_assertion_type":
+			return reject(http.StatusBadRequest, "invalid_request")
+		}
+		if len(values) != 1 {
+			return reject(http.StatusBadRequest, "invalid_request")
+		}
+	}
+	client, secret, ok := r.BasicAuth()
+	if !ok || client == "" || secret == "" || len(r.Header.Values("Authorization")) != 1 {
+		w.Header().Set("WWW-Authenticate", `Basic realm="nav"`)
+		return reject(http.StatusUnauthorized, "invalid_client")
+	}
+	return true
 }
 func (a *App) logout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" && r.Method != "POST" {
